@@ -15,23 +15,8 @@ from config import PENDING_TTL_SEC, PAGE_SIZE
 pending: Dict[int, Dict[str, Any]] = {}
 last_audio_url: Dict[int, str] = {}
 last_video_src: Dict[int, str] = {}
-last_video_desc: Dict[int, str] = {}
+last_description: Dict[int, str] = {}
 pending_video: Dict[int, Dict[str, Any]] = {}
-
-# Кружковые цифры для кнопок выбора фото
-_CIRCLED = (
-    "①②③④⑤⑥⑦⑧⑨⑩"
-    "⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
-    "㉑㉒㉓㉔㉕㉖㉗㉘㉙㉚"
-    "㉛㉜㉝㉞㉟㊱㊲㊳㊴㊵"
-    "㊶㊷㊸㊹㊺㊻㊼㊽㊾㊿"
-)
-
-def _circled(n: int) -> str:
-    """Возвращает кружковую цифру (1-based). Fallback — обычная цифра."""
-    if 1 <= n <= 50:
-        return _CIRCLED[n - 1]
-    return str(n)
 
 
 def cleanup_pending() -> None:
@@ -53,8 +38,6 @@ def picker_kb(uid: int) -> InlineKeyboardMarkup:
     photos: List[str] = st["photos"]
     selected: set[int] = st["selected"]
     page: int = st["page"]
-    desc_selected: bool = bool(st.get("desc_selected", False))
-    has_desc: bool = bool(st.get("description"))
 
     total = len(photos)
     pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
@@ -69,7 +52,7 @@ def picker_kb(uid: int) -> InlineKeyboardMarkup:
 
     for idx in range(start, end):
         num = idx + 1
-        txt = f"{'✅ ' if idx in selected else ''}{_circled(num)}"
+        txt = f"{'✅ ' if idx in selected else ''}{num}"
         row.append(InlineKeyboardButton(text=txt, callback_data=f"pk:t:{idx}"))
         if len(row) == 5:
             rows.append(row)
@@ -77,20 +60,13 @@ def picker_kb(uid: int) -> InlineKeyboardMarkup:
     if row:
         rows.append(row)
 
-    has_music: bool = bool(st.get("music"))
-    music_selected: bool = bool(st.get("music_selected", False))
-
-    rows.append([InlineKeyboardButton(text="📄 Выделить страницу", callback_data="pk:selpage")])
-    rows.append([InlineKeyboardButton(text="📥 Скачать всё", callback_data="pk:sendall")])
-    if st.get("video_slideshow"):
-        rows.append([InlineKeyboardButton(text="🤳 Фото-видео", callback_data="pk:photovideo")])
-    if has_music:
-        music_txt = f"{'✅ ' if music_selected else ''}🎵 Музыка"
-        rows.append([InlineKeyboardButton(text=music_txt, callback_data="pk:music")])
-    if has_desc:
-        desc_txt = f"{'✅ ' if desc_selected else ''}📑 Описание"
-        rows.append([InlineKeyboardButton(text=desc_txt, callback_data="pk:desc")])
-    rows.append([InlineKeyboardButton(text="🗑 Очистить выбор", callback_data="pk:clr")])
+    rows.append([InlineKeyboardButton(text="✅ Выбрать страницу", callback_data="pk:selpage")])
+    rows.append([InlineKeyboardButton(text="🔽 Скачать всё", callback_data="pk:sendall")])
+    row2: List[InlineKeyboardButton] = [InlineKeyboardButton(text="🎵 Скачать музыку", callback_data="pk:music")]
+    if st.get("description"):
+        row2.append(InlineKeyboardButton(text="📝 Описание", callback_data="pk:desc"))
+    rows.append(row2)
+    rows.append([InlineKeyboardButton(text="🧹 Очистить", callback_data="pk:clr")])
 
     if pages > 1:
         rows.append(
@@ -103,7 +79,7 @@ def picker_kb(uid: int) -> InlineKeyboardMarkup:
 
     rows.append(
         [
-            InlineKeyboardButton(text=f"✅ Скачать выбранное ({len(selected)})", callback_data="pk:go"),
+            InlineKeyboardButton(text=f"➡️ Продолжить ({len(selected)})", callback_data="pk:go"),
         ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)

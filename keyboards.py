@@ -8,7 +8,7 @@ from typing import List
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from config import SUPPORT_USERNAME, CRYPTO_DONATE_URL, BOT_SHARE_URL, STARS_MIN, STARS_MAX
-from helpers import html_escape, code, pe
+from helpers import html_escape, code
 
 # ================== STATS / TOP KEYBOARDS ==================
 def stats_kb() -> InlineKeyboardMarkup:
@@ -50,20 +50,14 @@ def top_kb() -> InlineKeyboardMarkup:
     )
 
 # ================== START ==================
-START_TEXT = pe(
-    "👋 Добро пожаловать в TIKSAVES!\n\n"
-    "📥 Скачивай контент из TikTok быстро и без лишних действий.\n\n"
-    "Доступно:\n"
-    "🎬 Видео без водяного знака\n"
-    "🖼️ Фото и слайд-шоу\n"
-    "🎵 Музыка из видео\n\n"
-    "📎 Просто отправь ссылку на TikTok — всё остальное бот сделает сам.\n\n"
-    "━━━━━━━━━━━━━━━\n\n"
-    "🧾 Помощь — /help\n"
-    "📊 Моя статистика — /stats\n"
-    "💛 Поддержать проект — /donate\n"
-    "🆘 Поддержка — /support\n\n"
-    "💛 Спасибо, что пользуешься TIKSAVES!"
+START_TEXT = (
+    "👋 Привет!\n\n"
+    "Я скачиваю видео, фото (слайдшоу) и музыку из TikTok.\n"
+    "📎 Просто отправь ссылку — остальное сделаю сам.\n\n"
+    "🧾 Помощь: /help\n"
+    "💛 Поддержать бота: /donate\n"
+    "🆘 Поддержка: /support\n"
+    "📊 Моя статистика: /stats"
 )
 
 # ================== DONATE ==================
@@ -94,39 +88,39 @@ def stars_kb() -> InlineKeyboardMarkup:
         ]
     )
 
-DONATE_TEXT = pe(
-    "💛 <b>Поддержать TIKSAVES</b>\n\n"
-    "Спасибо, что пользуешься ботом!\n\n"
-    "Каждый донат помогает оплачивать:\n"
-    "• ☁️ хостинг 24/7\n"
-    "• ⚡ серверы и трафик\n"
-    "• 🛠 разработку новых функций\n\n"
-    "Поддержать проект можно через Telegram Stars или криптовалюту.\n\n"
-    "Спасибо за поддержку! 💛"
+DONATE_TEXT = (
+    "📌 <b>Поддержать бота</b>\n\n"
+    "Спасибо, что пользуешься ботом! Донат помогает держать всё стабильно и быстро:\n"
+    "• хостинг и трафик 24/7\n"
+    "• поддержка прокси/апи\n"
+    "• новые функции и улучшения\n\n"
+    "Выбери удобный способ 👇"
 )
-STARS_MENU_TEXT = pe(
+STARS_MENU_TEXT = (
     "⭐ <b>Telegram Stars</b>\n\n"
-    "Поддержать проект можно прямо в Telegram.\n\n"
-    f"Выберите количество Stars\nили укажите своё значение.\n\n"
-    f"⭐ От {STARS_MIN} до {STARS_MAX} Stars\n\n"
-    "Спасибо за поддержку! 💛"
+    "Самый быстрый способ поддержки прямо в Telegram.\n"
+    f"Выбери сумму ({STARS_MIN}-{STARS_MAX} ⭐) или введи свою:"
 )
-SUPPORT_TEXT = pe(
+SUPPORT_TEXT = (
     "🆘 <b>Поддержка</b>\n\n"
-    "Возник вопрос или что-то не работает?\n\n"
-    f"📨 Напишите: {html_escape(SUPPORT_USERNAME)}\n\n"
-    "Чтобы мы быстрее помогли, приложите:\n"
-    "• ссылку на TikTok;\n"
-    "• краткое описание проблемы;\n"
-    "• при возможности — скриншот ошибки."
+    f"Если есть вопросы/проблемы - пиши сюда: {html_escape(SUPPORT_USERNAME)}\n"
+    "Сразу укажи ссылку и что именно не работает 🙌"
 )
 SHARE_TEXT = "Нашел топового бота для скачивания видео и фото из TikTok. Переходи ☝️"
 
 # ================== HELP ==================
-HELP_TEXT = pe(
-    "🧾 <b>Помощь</b>\n\n"
-    "Добро пожаловать в справочный центр TIKSAVES.\n\n"
-    "Выберите нужный раздел с помощью кнопок ниже 👇"
+HELP_TEXT = (
+    "🧾 <b>Помощь по боту</b>\n\n"
+    "📎 Просто отправь ссылку на TikTok — бот предложит варианты.\n\n"
+    "Кнопки и что они делают:\n"
+    "• 🎬 Скачать видео — пришлю видео без водяных знаков (если доступно)\n"
+    "• 🖼️ Скачать фото — выбор фото или всё сразу (слайдшоу)\n"
+    "• 🎵 Скачать музыку — скачивание звука/музыки\n"
+    "• 💛 Донат — поддержка проекта\n"
+    "• 🆘 Поддержка — связь с админом\n\n"
+    "⚠️ Лимиты:\n"
+    "• Частые запросы ограничены кулдауном\n"
+    "• Много фото за раз — лимит объёма"
 )
 
 def help_kb() -> InlineKeyboardMarkup:
@@ -134,13 +128,13 @@ def help_kb() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(text="🎬 Скачать видео", callback_data="help:video"),
-                InlineKeyboardButton(text="🖼 Скачать фото", callback_data="help:photo"),
+                InlineKeyboardButton(text="🖼️ Скачать фото", callback_data="help:photo"),
             ],
             [
                 InlineKeyboardButton(text="🎵 Скачать музыку", callback_data="help:music"),
             ],
             [
-                InlineKeyboardButton(text="⚠️ Ограничения", callback_data="help:limits"),
+                InlineKeyboardButton(text="⚠️ Лимиты", callback_data="help:limits"),
             ],
             [
                 InlineKeyboardButton(text="💛 Донат", callback_data="help:donate"),
@@ -163,49 +157,35 @@ def help_section_kb() -> InlineKeyboardMarkup:
     )
 
 HELP_SECTIONS = {
-    "video": pe(
+    "video": (
         "🎬 <b>Скачать видео</b>\n\n"
-        "1️⃣ Отправьте ссылку на TikTok.\n\n"
-        "2️⃣ Нажмите «🎬 Скачать видео».\n\n"
-        "3️⃣ Через несколько секунд бот отправит видео без водяного знака (если доступно)."
+        "1) Отправь ссылку на TikTok\n"
+        "2) Выбери «Скачать видео»\n"
+        "3) Получишь видео в чате"
     ),
-    "photo": pe(
-        "🖼 <b>Скачать фото</b>\n\n"
-        "1️⃣ Отправьте ссылку на публикацию с фотографиями.\n\n"
-        "2️⃣ Выберите нужные номера или нажмите «📥 Скачать всё».\n\n"
-        "3️⃣ Получите выбранные изображения в хорошем качестве."
+    "photo": (
+        "🖼️ <b>Скачать фото</b>\n\n"
+        "1) Отправь ссылку на TikTok с слайдшоу\n"
+        "2) Выбери фото по номерам или скачай всё\n"
+        "3) Получишь альбом с фото"
     ),
-    "music": pe(
+    "music": (
         "🎵 <b>Скачать музыку</b>\n\n"
-        "После обработки ссылки нажмите «🎵 Музыка».\n\n"
-        "Бот отправит оригинальную аудиодорожку из публикации."
+        "Нажми «Скачать музыку» после обработки ссылки — пришлю аудио файл."
     ),
-    "limits": pe(
-        "⚠️ <b>Ограничения</b>\n\n"
-        "Для стабильной работы действует защита от спама.\n\n"
-        "• Между запросами есть небольшая задержка.\n"
-        "• При большом количестве запросов возможна временная блокировка.\n"
-        "• Некоторые публикации могут быть недоступны из-за ограничений TikTok.\n\n"
-        "Спасибо за понимание 💛"
+    "limits": (
+        "⚠️ <b>Лимиты</b>\n\n"
+        "Слишком частые запросы ограничены кулдауном — подожди немного и попробуй снова.\n"
+        "При систематическом флуде возможна временная блокировка."
     ),
-    "donate": pe(
-        "💛 <b>Поддержать TIKSAVES</b>\n\n"
-        "Спасибо, что пользуешься ботом!\n\n"
-        "Каждый донат помогает оплачивать:\n"
-        "• ☁️ хостинг 24/7\n"
-        "• ⚡ серверы и трафик\n"
-        "• 🛠 разработку новых функций\n\n"
-        "Поддержать проект можно через Telegram Stars или криптовалюту.\n\n"
-        "Спасибо за поддержку! 💛"
+    "donate": (
+        "💛 <b>Донат</b>\n\n"
+        "Поддержка проекта через Stars или крипту. Спасибо!"
     ),
-    "support": pe(
+    "support": (
         "🆘 <b>Поддержка</b>\n\n"
-        "Возник вопрос или что-то не работает?\n\n"
-        f"📨 Напишите: {html_escape(SUPPORT_USERNAME)}\n\n"
-        "Чтобы мы быстрее помогли, приложите:\n"
-        "• ссылку на TikTok;\n"
-        "• краткое описание проблемы;\n"
-        "• при возможности — скриншот ошибки."
+        f"Пиши: {html_escape(SUPPORT_USERNAME)}\n"
+        "Укажи ссылку и что не работает."
     ),
 }
 
@@ -226,20 +206,20 @@ def post_download_kb() -> InlineKeyboardMarkup:
         ]
     )
 
-def under_video_kb(has_music: bool = False, has_desc: bool = False) -> InlineKeyboardMarkup:
-    """Кнопки под скачанным видео: Описание, Музыка (если есть), Донат, Поделиться."""
-    rows: List[List[InlineKeyboardButton]] = []
-    extra_row: List[InlineKeyboardButton] = []
-    if has_desc:
-        extra_row.append(InlineKeyboardButton(text="📑 Описание", callback_data="dl:desc"))
+def under_video_kb(has_music: bool = False, has_description: bool = False) -> InlineKeyboardMarkup:
+    """Кнопки под скачанным видео: Музыка (если есть), Описание (если есть), Донат, Поделиться."""
+    top_row: List[InlineKeyboardButton] = []
     if has_music:
-        extra_row.append(InlineKeyboardButton(text="🎵 Музыка", callback_data="dl:audio"))
-    if extra_row:
-        rows.append(extra_row)
-    rows.append([
+        top_row.append(InlineKeyboardButton(text="🎵 Музыка", callback_data="dl:audio"))
+    if has_description:
+        top_row.append(InlineKeyboardButton(text="📝 Описание", callback_data="dl:desc"))
+
+    bottom_row: List[InlineKeyboardButton] = [
         InlineKeyboardButton(text="💛 Донат", callback_data="donate:open"),
         InlineKeyboardButton(text="🔗 Поделиться", url=_share_url()),
-    ])
+    ]
+
+    rows = [top_row, bottom_row] if top_row else [bottom_row]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 def video_choice_kb() -> InlineKeyboardMarkup:
@@ -287,7 +267,7 @@ def admin_back_kb() -> InlineKeyboardMarkup:
         ]
     )
 
-ADMIN_MENU_TEXT = pe(
+ADMIN_MENU_TEXT = (
     "🛠 <b>Админ-панель</b>\n"
     "━━━━━━━━━━━━━━━━━━━━\n\n"
     "📊 <b>Статистика</b> — выбор периода\n"
@@ -299,7 +279,7 @@ ADMIN_MENU_TEXT = pe(
     "🧾 <b>Команды</b> — полный список\n"
 )
 
-ADMIN_HELP_TEXT = pe(
+ADMIN_HELP_TEXT = (
     "🧾 <b>Команды администратора</b>\n"
     "━━━━━━━━━━━━━━━━━━━━\n\n"
 
@@ -334,10 +314,9 @@ ADMIN_HELP_TEXT = pe(
     f"└ {code('/dblog')} — отчёт в лог-канал\n\n"
 
     "📣 <b>Рассылка</b>\n"
-    f"├ {code('/broadcast')} — пошаговая рассылка (текст → фото → итог с закрепом)\n"
+    f"├ {code('/broadcast текст')} — своя рассылка\n"
     f"├ {code('/reminder_message')} — напоминание\n"
-    f"├ {code('/advertisement_message')} — реклама\n"
-    f"└ {code('/undo_broadcast')} — удалить последнюю рассылку\n"
+    f"└ {code('/advertisement_message')} — реклама\n"
 )
 
 def admin_broadcast_confirm_kb(kind: str) -> InlineKeyboardMarkup:
@@ -356,30 +335,5 @@ def broadcast_cancel_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="⛔ Остановить рассылку", callback_data="ad:bcancel")],
-        ]
-    )
-
-# ================== BROADCAST WIZARD ==================
-def bcw_skip_photo_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="➡️ Пропустить (без фото)", callback_data="bcw:skip_photo")],
-            [InlineKeyboardButton(text="❌ Отменить рассылку", callback_data="bcw:abort")],
-        ]
-    )
-
-def bcw_result_kb(pin: bool) -> InlineKeyboardMarkup:
-    """
-    Итоговый экран рассылки: 📌 — toggle закрепа (нажал — включил, нажал ещё раз — выключил),
-    🚀 Разослать, ❌ Отменить.
-    """
-    pin_label = "📌 Закреп: вкл" if pin else "📌 Закреп: выкл"
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=pin_label, callback_data="bcw:toggle_pin")],
-            [
-                InlineKeyboardButton(text="🚀 Разослать", callback_data="bcw:send"),
-                InlineKeyboardButton(text="❌ Отменить", callback_data="bcw:abort"),
-            ],
         ]
     )

@@ -9,10 +9,10 @@ from typing import Dict, Any, List, Tuple
 
 from aiogram.types import Message, LinkPreviewOptions
 
-from helpers import html_escape, msk_now, period_keys, week_range_str, iter_day_keys, format_msk, pe
+from helpers import html_escape, msk_now, period_keys, week_range_str, iter_day_keys, format_msk
 from storage import store
 from admin_log_file import log_admin
-from logging_channel import format_user_for_log
+from logging_channel import log_event, log_admin_action_to_channel, format_user_for_log
 from keyboards import stats_kb, top_kb
 
 
@@ -89,7 +89,6 @@ def _admin_stats_range_text(start_dt: datetime, end_dt: datetime) -> str:
     video_sent = int(dls.get("video_sent", 0))
     photos_sent = int(dls.get("photos_sent", 0))
     audio_sent = int(dls.get("audio_sent", 0))
-    desc_sent = int(dls.get("desc_sent", 0))
     video_ops = int(dls.get("video_ops", 0))
     photo_ops = int(dls.get("photo_ops", 0))
 
@@ -153,7 +152,7 @@ def _admin_stats_range_text(start_dt: datetime, end_dt: datetime) -> str:
         f"<i>{start_dt.strftime('%d.%m.%Y')} — {end_dt.strftime('%d.%m.%Y')}</i>"
     )
 
-    total_dl = video_sent + photos_sent + audio_sent + desc_sent
+    total_dl = video_ops + photo_ops + audio_sent
     pct_active = f"{active_all * 100 / users_total:.1f}%" if users_total else "0%"
 
     top_err_stages_sorted = sorted(err_stage.items(), key=lambda kv: int(kv[1]), reverse=True)
@@ -166,10 +165,9 @@ def _admin_stats_range_text(start_dt: datetime, end_dt: datetime) -> str:
         f"├ Всего: <b>{users_total}</b>\n"
         f"└ Новых за период: <b>{users_new}</b>\n\n"
         f"⬇️ <b>Скачивания</b>\n"
-        f"├ 🎬 Видео: <b>{video_sent}</b> шт\n"
-        f"├ 🖼 Фото: <b>{photos_sent}</b> шт\n"
+        f"├ 🎬 Видео: <b>{video_ops}</b> операций (файлов: <b>{video_sent}</b>)\n"
+        f"├ 🖼️ Фото: <b>{photo_ops}</b> операций (фото: <b>{photos_sent}</b>)\n"
         f"├ 🎵 Музыка: <b>{audio_sent}</b> шт\n"
-        f"├ 📑 Описание: <b>{desc_sent}</b> шт\n"
         f"└ 📦 Итого: <b>{total_dl}</b> шт\n\n"
         f"💥 <b>Ошибки</b>\n"
         f"├ Всего: <b>{err_total}</b>\n"
@@ -186,6 +184,9 @@ def _admin_stats_range_text(start_dt: datetime, end_dt: datetime) -> str:
         f"└ Активных сейчас: <b>{active_bans}</b>\n\n"
         f"⭐ <b>Звёзды (донаты)</b>\n"
         f"└ За период: <b>{stars_total} ⭐</b>\n\n"
+        f"📈 <b>Активность</b>\n"
+        f"├ Скачивали: <b>{active_all}</b> / <b>{users_total}</b> ({pct_active})\n"
+        f"└ Из них по видео: <b>{active_video_all}</b> / <b>{users_total}</b>\n\n"
         f"🏆 <b>Топ скачиваний</b>\n{fmt_top_downloaders()}\n\n"
         f"🏆 <b>Топ донатеров</b>\n{fmt_top_don()}\n\n"
     )
@@ -219,16 +220,13 @@ def _user_stats_range_text(uid: int, start_dt: datetime, end_dt: datetime) -> st
 
     return (
         "📊 <b>Твоя статистика (диапазон)</b>\n"
-        f"<i>{start_dt.strftime('%d.%m.%Y')} — {end_dt.strftime('%d.%m.%Y')}</i>\n\n"
-        f"🆔 ID: <a href=\"tg://user?id={uid}\"><code>{uid}</code></a>\n"
-        f"🗓 Первый визит: <b>{joined}</b>\n\n"
-        "━━━━━━━━━━━━━━━\n\n"
-        "📥 <b>Скачивания</b>\n\n"
-        f"🎬 Видео\n└ {v_sent} файлов\n\n"
-        f"🖼 Фото\n└ {p_sent} файлов\n\n"
-        f"🎵 Музыка\n└ {a_sent} треков\n\n"
-        "━━━━━━━━━━━━━━━\n\n"
-        f"⭐ Пожертвовано: <b>{stars} Stars</b>\n"
+        f"<i>{start_dt.strftime('%d.%m.%Y')} - {end_dt.strftime('%d.%m.%Y')}</i>\n\n"
+        f"👤 ID: <b>{uid}</b>\n"
+        f"🕒 Первый визит: <b>{joined}</b>\n\n"
+        f"🎬 Видео скачано: <b>{v_ops}</b> операций (файлов: <b>{v_sent}</b>)\n"
+        f"🖼️ Фото скачано: <b>{p_ops}</b> операций (фото: <b>{p_sent}</b>)\n"
+        f"🎵 Музыка скачано: <b>{a_sent}</b>\n"
+        f"⭐ Stars пожертвовано: <b>{stars}</b>\n"
     )
 
 def _admin_stats_text(mode: str) -> str:
@@ -255,7 +253,6 @@ def _admin_stats_text(mode: str) -> str:
     video_sent = int(dls.get("video_sent", 0))
     photos_sent = int(dls.get("photos_sent", 0))
     audio_sent = int(dls.get("audio_sent", 0))
-    desc_sent = int(dls.get("desc_sent", 0))
     video_ops = int(dls.get("video_ops", 0))
     photo_ops = int(dls.get("photo_ops", 0))
 
@@ -334,7 +331,7 @@ def _admin_stats_text(mode: str) -> str:
     else:
         users_new_block = f"🆕 Новых за период: <b>{users_new}</b>\n"
 
-    total_dl = video_sent + photos_sent + audio_sent + desc_sent
+    total_dl = video_ops + photo_ops + audio_sent
     pct_active = f"{active_all * 100 / users_total:.1f}%" if users_total else "0%"
 
     text_parts = [
@@ -344,10 +341,9 @@ def _admin_stats_text(mode: str) -> str:
         f"└ Всего: <b>{users_total}</b>\n\n"
         f"{users_new_block}\n"
         f"⬇️ <b>Скачивания</b>\n"
-        f"├ 🎬 Видео: <b>{video_sent}</b> шт\n"
-        f"├ 🖼 Фото: <b>{photos_sent}</b> шт\n"
+        f"├ 🎬 Видео: <b>{video_ops}</b> операций (файлов: <b>{video_sent}</b>)\n"
+        f"├ 🖼️ Фото: <b>{photo_ops}</b> операций (фото: <b>{photos_sent}</b>)\n"
         f"├ 🎵 Музыка: <b>{audio_sent}</b> шт\n"
-        f"├ 📑 Описание: <b>{desc_sent}</b> шт\n"
         f"└ 📦 Итого: <b>{total_dl}</b> шт\n\n"
         f"💥 <b>Ошибки</b>\n"
         f"├ Всего: <b>{err_total}</b>\n"
@@ -367,7 +363,10 @@ def _admin_stats_text(mode: str) -> str:
     )
     if mode == "all":
         text_parts.append(
-            f"\n🏆 <b>Топ скачиваний</b>\n{fmt_top_downloaders()}\n\n"
+            f"\n📈 <b>Активность</b>\n"
+            f"├ Скачивали: <b>{active_all}</b> / <b>{users_total}</b> ({pct_active})\n"
+            f"└ Из них по видео: <b>{active_video_all}</b> / <b>{users_total}</b>\n\n"
+            f"🏆 <b>Топ скачиваний</b>\n{fmt_top_downloaders()}\n\n"
             f"🏆 <b>Топ донатеров</b>\n{fmt_top_don()}\n\n"
         )
     return "".join(text_parts)
@@ -463,6 +462,8 @@ def _user_stats_text(uid: int) -> str:
     rec = us_dl.get(str(uid), {}) or {}
     v_sent = int(rec.get("video_sent", 0))
     p_sent = int(rec.get("photos_sent", 0))
+    v_ops = int(rec.get("video_ops", 0))
+    p_ops = int(rec.get("photo_ops", 0))
     a_sent = int(rec.get("audio_sent", 0))
     stars_by_user = (store.data.get("user_stats", {}) or {}).get("stars", {}) or {}
     stars = int(stars_by_user.get(str(uid), 0))
@@ -473,19 +474,13 @@ def _user_stats_text(uid: int) -> str:
         last_seen_ts = int((store.data.get("last_seen", {}) or {}).get(str(uid), 0))
         joined = format_msk(last_seen_ts) if last_seen_ts > 0 else "неизвестно"
     return (
-        "📊 <b>Твоя статистика</b>\n\n"
-        "👤 <b>Профиль</b>\n\n"
-        f"🆔 ID: <a href=\"tg://user?id={uid}\"><code>{uid}</code></a>\n"
-        f"🗓 Первый визит\n└ {joined}\n\n"
-        "━━━━━━━━━━━━━━━\n\n"
-        "📥 <b>Всего скачано</b>\n\n"
-        f"🎬 Видео\n└ {v_sent} файлов\n\n"
-        f"🖼 Фото\n└ {p_sent} файлов\n\n"
-        f"🎵 Музыка\n└ {a_sent} треков\n\n"
-        "━━━━━━━━━━━━━━━\n\n"
-        "⭐ <b>Поддержка проекта</b>\n\n"
-        f"💛 Пожертвовано:\n└ {stars} Stars\n\n"
-        "Спасибо, что пользуешься TIKSAVES! 💛"
+        "📊 <b>Твоя статистика (всё время)</b>\n\n"
+        f"👤 ID: <b>{uid}</b>\n"
+        f"🕒 Первый визит: <b>{joined}</b>\n\n"
+        f"🎬 Видео скачано: <b>{v_ops}</b> операций (файлов: <b>{v_sent}</b>)\n"
+        f"🖼️ Фото скачано: <b>{p_ops}</b> операций (фото: <b>{p_sent}</b>)\n"
+        f"🎵 Музыка скачано: <b>{a_sent}</b>\n"
+        f"⭐ Пожертвовано Stars: <b>{stars}</b>\n"
     )
 
 def _user_stats_period_text(uid: int, mode: str) -> str:
@@ -496,6 +491,8 @@ def _user_stats_period_text(uid: int, mode: str) -> str:
     rec = rec or {}
     v_sent = int(rec.get("video_sent", 0))
     p_sent = int(rec.get("photos_sent", 0))
+    v_ops = int(rec.get("video_ops", 0))
+    p_ops = int(rec.get("photo_ops", 0))
     a_sent = int(rec.get("audio_sent", 0))
     stars = int(rec.get("stars", 0))
     nice = {"d": "день", "n": "неделя", "m": "месяц", "y": "год"}[mode]
@@ -506,12 +503,10 @@ def _user_stats_period_text(uid: int, mode: str) -> str:
     return (
         f"📊 <b>Твоя статистика ({nice})</b>\n"
         f"<i>{html_escape(key_view)}</i>\n\n"
-        "━━━━━━━━━━━━━━━\n\n"
-        f"🎬 Видео\n└ {v_sent} файлов\n\n"
-        f"🖼 Фото\n└ {p_sent} файлов\n\n"
-        f"🎵 Музыка\n└ {a_sent} треков\n\n"
-        "━━━━━━━━━━━━━━━\n\n"
-        f"⭐ Пожертвовано: <b>{stars} Stars</b>\n"
+        f"🎬 Видео скачано: <b>{v_ops}</b> операций (файлов: <b>{v_sent}</b>)\n"
+        f"🖼️ Фото скачано: <b>{p_ops}</b> операций (фото: <b>{p_sent}</b>)\n"
+        f"🎵 Музыка скачано: <b>{a_sent}</b>\n"
+        f"⭐ Stars пожертвовано: <b>{stars}</b>\n"
     )
 
 def _admin_banlist_text() -> str:
@@ -531,10 +526,14 @@ def _admin_banlist_text() -> str:
 # ================== SEND WRAPPERS ==================
 async def send_stats_message(message: Message, uid: int, label: str, mode: str, *, edit: bool = False) -> None:
     log_admin(uid, "stats", f"mode={mode}")
-    logger.log(Event.ADMIN, "Статистика запрошена", user={"id": uid}, extra={"Режим": mode}, skip_telegram=True)
+    await log_admin_action_to_channel(
+        message.bot,
+        "Статистика",
+        [f"👤 Кто: <b>{format_user_for_log(label, uid)}</b>", f"🧾 Режим: <b>{html_escape(mode)}</b>"],
+    )
     with contextlib.suppress(Exception):
         await message.bot.send_chat_action(message.chat.id, "typing")
-    text = pe(_admin_stats_text(mode))
+    text = _admin_stats_text(mode)
     if edit and message:
         with contextlib.suppress(Exception):
             await message.edit_text(text, parse_mode="HTML", reply_markup=stats_kb(), link_preview_options=LinkPreviewOptions(is_disabled=True))
@@ -548,10 +547,17 @@ async def send_stats_message(message: Message, uid: int, label: str, mode: str, 
 
 async def send_stats_range_message(message: Message, uid: int, label: str, start_dt: datetime, end_dt: datetime) -> None:
     log_admin(uid, "stats_range", f"from={start_dt.strftime('%Y-%m-%d')} to={end_dt.strftime('%Y-%m-%d')}")
-    logger.log(Event.ADMIN, "Статистика (диапазон) запрошена", user={"id": uid}, extra={"От": start_dt.strftime("%d.%m.%Y"), "До": end_dt.strftime("%d.%m.%Y")}, skip_telegram=True)
+    await log_admin_action_to_channel(
+        message.bot,
+        "Статистика (диапазон)",
+        [
+            f"👤 Кто: <b>{format_user_for_log(label, uid)}</b>",
+            f"🧾 Период: <b>{start_dt.strftime('%d.%m.%Y')} - {end_dt.strftime('%d.%m.%Y')}</b>",
+        ],
+    )
     with contextlib.suppress(Exception):
         await message.bot.send_chat_action(message.chat.id, "typing")
-    text = pe(_admin_stats_range_text(start_dt, end_dt))
+    text = _admin_stats_range_text(start_dt, end_dt)
     await message.answer(
         text,
         parse_mode="HTML",
@@ -561,10 +567,14 @@ async def send_stats_range_message(message: Message, uid: int, label: str, start
 
 async def send_top_message(message: Message, uid: int, label: str, mode: str, *, edit: bool = False) -> None:
     log_admin(uid, "top", f"mode={mode}")
-    logger.log(Event.ADMIN, "Топ запрошен", user={"id": uid}, extra={"Режим": mode}, skip_telegram=True)
+    await log_admin_action_to_channel(
+        message.bot,
+        "Топ",
+        [f"👤 Кто: <b>{format_user_for_log(label, uid)}</b>", f"🧾 Режим: <b>{html_escape(mode)}</b>"],
+    )
     with contextlib.suppress(Exception):
         await message.bot.send_chat_action(message.chat.id, "typing")
-    text = pe(_top_text_for_mode(mode))
+    text = _top_text_for_mode(mode)
     if edit and message:
         with contextlib.suppress(Exception):
             await message.edit_text(text, parse_mode="HTML", reply_markup=top_kb(), link_preview_options=LinkPreviewOptions(is_disabled=True))
@@ -573,8 +583,47 @@ async def send_top_message(message: Message, uid: int, label: str, mode: str, *,
 
 async def send_top_range_message(message: Message, uid: int, label: str, start_dt: datetime, end_dt: datetime) -> None:
     log_admin(uid, "top_range", f"from={start_dt.strftime('%Y-%m-%d')} to={end_dt.strftime('%Y-%m-%d')}")
-    logger.log(Event.ADMIN, "Топ (диапазон) запрошен", user={"id": uid}, extra={"От": start_dt.strftime("%d.%m.%Y"), "До": end_dt.strftime("%d.%m.%Y")}, skip_telegram=True)
+    await log_admin_action_to_channel(
+        message.bot,
+        "Топ (диапазон)",
+        [
+            f"👤 Кто: <b>{format_user_for_log(label, uid)}</b>",
+            f"🧾 Период: <b>{start_dt.strftime('%d.%m.%Y')} - {end_dt.strftime('%d.%m.%Y')}</b>",
+        ],
+    )
     with contextlib.suppress(Exception):
         await message.bot.send_chat_action(message.chat.id, "typing")
-    text = pe(_top_text_for_range(start_dt, end_dt))
+    text = _top_text_for_range(start_dt, end_dt)
     await message.answer(text, parse_mode="HTML", link_preview_options=LinkPreviewOptions(is_disabled=True), reply_markup=top_kb())
+
+
+# ================== COMPACT DAILY SUMMARY (для лог-канала) ==================
+def daily_summary_text() -> str:
+    """
+    Короткая сводка за сегодня — одно сообщение в лог-канал раз в день
+    вместо десятков отдельных событий за день.
+    """
+    keys = period_keys(msk_now())
+    bucket = (store.data.get("stats", {}).get("d", {}) or {}).get(keys["d"], {}) or {}
+
+    users_new = int(bucket.get("users_new", 0))
+    dls = bucket.get("downloads", {}) or {}
+    video_ops = int(dls.get("video_ops", 0))
+    photo_ops = int(dls.get("photo_ops", 0))
+    audio_sent = int(dls.get("audio_sent", 0))
+    errors_total = int((bucket.get("errors", {}) or {}).get("total", 0))
+    stars_total = int(bucket.get("stars_total", 0))
+    bans_total = int(bucket.get("bans_total", 0))
+    users_total = len(store.data.get("users", []))
+
+    return (
+        "📊 <b>Итоги дня</b>\n"
+        f"<i>{keys['d']}</i>\n\n"
+        f"🆕 Новых пользователей: <b>{users_new}</b> (всего: <b>{users_total}</b>)\n"
+        f"🎬 Видео: <b>{video_ops}</b>\n"
+        f"🖼️ Фото-сессий: <b>{photo_ops}</b>\n"
+        f"🎵 Музыки: <b>{audio_sent}</b>\n"
+        f"❌ Ошибок: <b>{errors_total}</b>\n"
+        f"🚫 Банов: <b>{bans_total}</b>\n"
+        f"⭐ Stars: <b>{stars_total}</b>"
+    )

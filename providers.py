@@ -16,9 +16,9 @@ from aiohttp import ClientPayloadError
 from aiogram import Bot
 
 from config import API_URL, APIFY_TOKEN, API_ERROR_WINDOW_SEC, API_ERROR_THRESHOLD, API_FALLBACK_COOLDOWN_SEC
-from helpers import html_escape, code, clamp_reason, ms_since
+from helpers import html_escape, code, clamp_reason, ms_since, exc_type_name
 from storage import store
-from logger import logger, Event
+from logging_channel import log_event
 
 
 class _FileTooLargeError(Exception):
@@ -58,22 +58,28 @@ class TikWMClient(BaseProvider):
         self.bot = bot
 
     async def _log_dlerr(self, stage: str, src: str, attempt: int, dur_ms: int, err: Exception) -> None:
-        # stats error counter (старая система, оставлена для совместимости статистики /stats)
+        # stats error counter
         try:
             store.inc_error(stage, err)
         except Exception:
             pass
 
-        with contextlib.suppress(Exception):
-            logger.log_exception(
-                err,
-                module=f"providers.{type(self).__name__}",
-                provider=type(self).__name__,
-                url=src,
-                attempt=attempt,
-                duration_ms=dur_ms,
-                title=f"Ошибка скачивания ({stage})",
-            )
+        if not self.bot:
+            return
+        reason = clamp_reason(err)
+        await log_event(
+            self.bot,
+            "dlerr",
+            [
+                "❌ Категория: <b>Ошибка скачивания</b>",
+                f"🧩 Стадия: <b>{html_escape(stage)}</b>",
+                f"🧬 Тип: <b>{html_escape(exc_type_name(err))}</b>",
+                f"🔁 Попытка: <b>{attempt}</b>",
+                f"⏱️ Время: <b>{dur_ms} мс</b>",
+                f"🔗 Ссылка: {code(src)}",
+                f"🧨 Причина: <b>{html_escape(reason)}</b>",
+            ],
+        )
 
     @staticmethod
     def _media_from_data(data: Dict[str, Any]) -> MediaInfo:
@@ -123,7 +129,7 @@ class TikWMClient(BaseProvider):
         }
 
         last_err: Optional[Exception] = None
-        for attempt in range(1, 5):
+        for attempt in range(1, 4):
             t0 = time.perf_counter()
             try:
                 async with self.session.post(API_URL, data={"url": url}, headers=headers) as resp:
@@ -141,7 +147,7 @@ class TikWMClient(BaseProvider):
                     asyncio.TimeoutError, aiohttp.ClientOSError, aiohttp.ClientResponseError) as e:
                 last_err = e
                 await self._log_dlerr("api", url, attempt, ms_since(t0), e)
-                await asyncio.sleep(min(1.0 * attempt, 4.0))
+                await asyncio.sleep(0.6 * attempt)
                 continue
             except Exception as e:
                 await self._log_dlerr("api", url, attempt, ms_since(t0), e)
@@ -269,11 +275,11 @@ class ProviderSwitcher:
         return self.primary
 
     async def log_switch(self, using: str) -> None:
-        logger.log(
-            Event.PROVIDER,
-            "Переключение провайдера",
-            status="WARNING",
-            content={"provider": using},
-            note=f"Активный провайдер изменён на {using} из-за серии ошибок основного.",
-            force_telegram=True,
+        await log_event(
+            self.bot,
+            "dlerr",
+            [
+                "🔁 Категория: <b>Переключение провайдера</b>",
+                f"📡 Активный: <b>{html_escape(using)}</b>",
+            ],
         )

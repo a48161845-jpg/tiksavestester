@@ -15,42 +15,6 @@ from config import MSK_TZ, TIKTOK_RE, ADMINS
 def html_escape(s: str) -> str:
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
-# ================== PREMIUM EMOJI ==================
-from _premium_emoji import PREMIUM_EMOJI_MAP, REMOVE_EMOJI
-
-_PE_PATTERN = re.compile(
-    "|".join(re.escape(e) for e in sorted(PREMIUM_EMOJI_MAP.keys() | REMOVE_EMOJI, key=len, reverse=True))
-)
-
-def pe(text: str) -> str:
-    """
-    Заменяет обычные эмодзи в HTML-тексте на Telegram Premium custom emoji
-    (тег <tg-emoji emoji-id="...">). У пользователей без Premium Telegram
-    сам красиво показывает юникод-эмодзи внутри тега — деградация не ломает вид.
-    Применять ПОСЛЕ формирования финального HTML-текста (html_escape уже выполнен),
-    т.к. emoji не содержат HTML-спецсимволов и эта замена безопасна в любом месте строки.
-
-    Идемпотентна: если текст уже содержит <tg-emoji>, повторный вызов pe()
-    не создаст вложенных тегов (пропускает эмодзи, уже находящиеся внутри tg-emoji).
-    """
-    if "<tg-emoji" in text:
-        # Текст уже когда-то обрабатывался pe() — защищаем уже обёрнутые эмодзи
-        # от повторной обёртки, заменяя эмодзи только вне existing tg-emoji блоков.
-        parts = re.split(r'(<tg-emoji[^>]*>.*?</tg-emoji>)', text)
-        return "".join(p if p.startswith("<tg-emoji") else _pe_raw(p) for p in parts)
-    return _pe_raw(text)
-
-def _pe_raw(text: str) -> str:
-    def _sub(m: "re.Match[str]") -> str:
-        ch = m.group(0)
-        if ch in REMOVE_EMOJI:
-            return ""
-        eid = PREMIUM_EMOJI_MAP.get(ch)
-        if not eid:
-            return ch
-        return f'<tg-emoji emoji-id="{eid}">{ch}</tg-emoji>'
-    return _PE_PATTERN.sub(_sub, text)
-
 def code(s: Any) -> str:
     return f"<code>{html_escape(str(s))}</code>"
 
@@ -159,6 +123,10 @@ def clamp_reason(e: Exception, limit: int = 220) -> str:
     if len(s) > limit:
         s = s[:limit - 3] + "..."
     return s
+
+def exc_type_name(e: Exception) -> str:
+    """Имя класса исключения — для подробных логов ошибок."""
+    return e.__class__.__name__
 
 def is_admin(uid: int) -> bool:
     from storage import store

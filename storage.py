@@ -26,21 +26,6 @@ CREATE TABLE IF NOT EXISTS bot_kv (
     key TEXT PRIMARY KEY,
     value JSONB NOT NULL
 );
-
-CREATE TABLE IF NOT EXISTS event_log (
-    id BIGSERIAL PRIMARY KEY,
-    ts TIMESTAMPTZ NOT NULL DEFAULT now(),
-    event TEXT NOT NULL,
-    status TEXT,
-    user_id BIGINT,
-    provider TEXT,
-    duration_ms INTEGER,
-    payload JSONB NOT NULL DEFAULT '{}'::jsonb
-);
-
-CREATE INDEX IF NOT EXISTS idx_event_log_ts ON event_log (ts);
-CREATE INDEX IF NOT EXISTS idx_event_log_event ON event_log (event);
-CREATE INDEX IF NOT EXISTS idx_event_log_user_id ON event_log (user_id);
 """
 
 # =================== POOL ===================
@@ -91,68 +76,6 @@ async def _db_get_all() -> Dict[str, Any]:
         return {r["key"]: json.loads(r["value"]) for r in rows}
 
 
-# =================== EVENT LOG (новая система логирования) ===================
-def db_pool_available() -> bool:
-    return _pool is not None
-
-
-async def db_insert_event(
-    event: str,
-    status: Optional[str],
-    user_id: Optional[int],
-    provider: Optional[str],
-    duration_ms: Optional[int],
-    payload: Dict[str, Any],
-) -> None:
-    """Записывает одно событие в таблицу event_log. Используется новым Logger."""
-    if _pool is None:
-        return
-    v = json.dumps(payload, ensure_ascii=False, default=str)
-    async with _pool.acquire() as conn:
-        await conn.execute(
-            "INSERT INTO event_log(event, status, user_id, provider, duration_ms, payload) "
-            "VALUES($1,$2,$3,$4,$5,$6::jsonb)",
-            event, status, user_id, provider, duration_ms, v,
-        )
-
-
-async def db_fetch_events_since(seconds_ago: int, event: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Возвращает события за последние N секунд (для агрегированных сводок)."""
-    if _pool is None:
-        return []
-    async with _pool.acquire() as conn:
-        if event:
-            rows = await conn.fetch(
-                "SELECT event, status, user_id, provider, duration_ms, payload, ts "
-                "FROM event_log WHERE ts > now() - ($1 || ' seconds')::interval AND event=$2 "
-                "ORDER BY ts DESC",
-                str(seconds_ago), event,
-            )
-        else:
-            rows = await conn.fetch(
-                "SELECT event, status, user_id, provider, duration_ms, payload, ts "
-                "FROM event_log WHERE ts > now() - ($1 || ' seconds')::interval "
-                "ORDER BY ts DESC",
-                str(seconds_ago),
-            )
-        return [dict(r) for r in rows]
-
-
-async def db_cleanup_old_events(keep_days: int = 30) -> int:
-    """Удаляет события старше keep_days дней. Возвращает кол-во удалённых строк."""
-    if _pool is None:
-        return 0
-    async with _pool.acquire() as conn:
-        result = await conn.execute(
-            "DELETE FROM event_log WHERE ts < now() - ($1 || ' days')::interval",
-            str(keep_days),
-        )
-        try:
-            return int(result.split()[-1])
-        except Exception:
-            return 0
-
-
 # =================== MIGRATION ===================
 async def _maybe_migrate() -> None:
     """Миграция из data.json отключена — используем только PostgreSQL."""
@@ -187,7 +110,6 @@ class Storage:
             "last_seen": {},
             "admins_extra": [],  # дополнительные админы (кроме ADMINS из config)
             "users_info": {},    # актуальные данные профиля: {uid: {username, first_name, last_name}}
-            "admin_log": [],     # текстовый лог админ-действий (переживает рестарт контейнера)
             "stats": {
                 "d": {}, "n": {}, "m": {}, "y": {},
                 "all": {
@@ -369,31 +291,6 @@ class Storage:
             else:
                 bucket["photo_ops"] = int(bucket.get("photo_ops", 0)) + 1
                 bucket["photos_sent"] = int(bucket.get("photos_sent", 0)) + items
-
-        self._touch_seen(uid)
-        self._mark_dirty()
-
-    def inc_desc(self, uid: int) -> None:
-        """Счётчик отправленных описаний (текст под видео/фото отдельной кнопкой)."""
-        from helpers import msk_now, period_keys
-        now_dt = msk_now()
-        keys = period_keys(now_dt)
-
-        def apply_bucket(b: Dict[str, Any]) -> None:
-            d = b.setdefault("downloads", {})
-            d["desc_sent"] = int(d.get("desc_sent", 0)) + 1
-
-        for mode, key in keys.items():
-            apply_bucket(self._ensure_bucket(mode, key))
-        apply_bucket(self.data["stats"]["all"])
-
-        us = self.data.setdefault("user_stats", {}).setdefault("downloads", {})
-        rec = us.setdefault(str(uid), {"video_ops": 0, "photo_ops": 0, "video_sent": 0, "photos_sent": 0, "audio_sent": 0, "desc_sent": 0})
-        rec["desc_sent"] = int(rec.get("desc_sent", 0)) + 1
-
-        for mode, key in keys.items():
-            bucket = self._user_period_rec(uid, mode, key)
-            bucket["desc_sent"] = int(bucket.get("desc_sent", 0)) + 1
 
         self._touch_seen(uid)
         self._mark_dirty()

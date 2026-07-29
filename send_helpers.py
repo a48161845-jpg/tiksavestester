@@ -20,12 +20,12 @@ from config import (
     ALBUM_PAUSE_MAX,
     MAX_VIDEO_BYTES,
     MAX_AUDIO_BYTES,
+    DESCRIPTION_TG_LIMIT,
 )
-from helpers import html_escape, code, clamp_reason, pe
+from helpers import html_escape, code, clamp_reason, exc_type_name
 from storage import store
 from providers import BaseProvider
-from logging_channel import format_user_for_log
-from logger import logger, Event, Stopwatch
+from logging_channel import log_event, format_user_for_log
 
 
 def chunk(items: List[str], size: int) -> List[List[str]]:
@@ -33,16 +33,9 @@ def chunk(items: List[str], size: int) -> List[List[str]]:
 
 
 async def send_photos(message: Message, urls: List[str], caption_html: str = CAPTION_PHOTO) -> int:
-    """
-    Отправляет фото альбомами (до MEDIA_GROUP_LIMIT штук за раз).
-    Возвращает РЕАЛЬНОЕ количество успешно отправленных фото —
-    если какой-то альбом не ушёл (битая ссылка/таймаут), считаем
-    только то, что реально долетело до пользователя.
-    """
     packs = chunk(urls, MEDIA_GROUP_LIMIT)
     total = len(urls)
     sent = 0
-    actually_sent = 0
     for pack in packs:
         media: List[InputMediaPhoto] = []
         for i, u in enumerate(pack):
@@ -54,22 +47,15 @@ async def send_photos(message: Message, urls: List[str], caption_html: str = CAP
 
         try:
             await message.answer_media_group(media)
-            actually_sent += len(pack)
         except TelegramRetryAfter as e:
             wait = int(getattr(e, "retry_after", 2)) + 1
             await asyncio.sleep(wait)
-            try:
-                await message.answer_media_group(media)
-                actually_sent += len(pack)
-            except Exception:
-                pass  # пакет так и не ушёл — не считаем его отправленным
-        except Exception:
-            pass  # битый пакет (например невалидная ссылка фото) — пропускаем, не прерывая остальные
+            await message.answer_media_group(media)
 
         await asyncio.sleep(random.uniform(ALBUM_PAUSE_MIN, ALBUM_PAUSE_MAX))
         sent += len(pack)
 
-    return actually_sent
+    return len(urls)
 
 
 async def send_video_smart(
@@ -95,12 +81,12 @@ async def send_video_smart(
             if progress_msg:
                 with contextlib.suppress(Exception):
                     await progress_msg.edit_text(
-                        pe("⏳ <b>Скачиваю… понадобится немного больше времени...</b>"),
+                        "⏳ <b>Скачиваю… понадобится немного больше времени...</b>",
                         parse_mode="HTML",
                     )
             else:
                 progress_msg = await message.answer(
-                    pe("⏳ <b>Скачиваю… понадобится немного больше времени...</b>"),
+                    "⏳ <b>Скачиваю… понадобится немного больше времени...</b>",
                     parse_mode="HTML",
                 )
 
@@ -131,38 +117,6 @@ def _audio_user_id(message: Message, uid: Optional[int]) -> int:
     return message.chat.id if message.chat else 0
 
 
-async def send_description(message: Message, description: Optional[str], *, uid: Optional[int] = None) -> bool:
-    """
-    Отправляет описание видео/фото отдельным сообщением.
-    Если текст длиннее лимита Telegram на сообщение (4096) — отправляет файлом .txt
-    без каких-либо изменений текста (без обрезки/форматирования).
-    Возвращает True если что-то отправлено.
-    """
-    if not description:
-        await message.answer(pe("📑 У этой публикации нет описания."), parse_mode="HTML")
-        return False
-
-    text = description.strip()
-    if not text:
-        await message.answer(pe("📑 У этой публикации нет описания."), parse_mode="HTML")
-        return False
-
-    if len(text) <= 4000:
-        await message.answer(pe(f"📑 Описание:\n\n<code>{html_escape(text)}</code>"), parse_mode="HTML")
-    else:
-        tmp = Path(f"tmp_desc_{uid or 0}_{int(time.time())}.txt")
-        try:
-            tmp.write_text(text, encoding="utf-8")
-            await message.answer_document(FSInputFile(tmp, filename="description.txt"), caption=pe("📑 Описание (текст слишком длинный для сообщения)"), parse_mode="HTML")
-        finally:
-            with contextlib.suppress(Exception):
-                tmp.unlink(missing_ok=True)
-    if uid is not None:
-        with contextlib.suppress(Exception):
-            store.inc_desc(uid)
-    return True
-
-
 async def send_music_if_any(
     message: Message,
     provider: BaseProvider,
@@ -180,11 +134,14 @@ async def send_music_if_any(
         if uid is not None:
             store.inc_audio(uid, 1)
         if label is not None:
-            logger.log(
-                Event.DOWNLOAD, "Музыка скачана",
-                status="SUCCESS",
-                user={"id": user_id, "username": label if label.startswith("@") else None},
-                content={"type": "audio", "provider": type(provider).__name__, "source": src or ""},
+            await log_event(
+                message.bot,
+                "audiodl",
+                [
+                    "🎵 Категория: <b>Скачивание музыки</b>",
+                    f"👤 User/id: <b>{format_user_for_log(label, user_id)}</b>",
+                    f"🔗 Ссылка: {code(src or '')}" if src else "🔗 Ссылка: -",
+                ],
             )
         return
     except TelegramBadRequest as e:
@@ -196,23 +153,59 @@ async def send_music_if_any(
             if uid is not None:
                 store.inc_audio(uid, 1)
             if label is not None:
-                logger.log(
-                    Event.DOWNLOAD, "Музыка скачана (fallback)",
-                    status="SUCCESS",
-                    user={"id": user_id, "username": label if label.startswith("@") else None},
-                    content={"type": "audio", "provider": type(provider).__name__, "source": src or ""},
+                await log_event(
+                    message.bot,
+                    "audiodl",
+                    [
+                        "🎵 Категория: <b>Скачивание музыки</b>",
+                        f"👤 User/id: <b>{format_user_for_log(label, user_id)}</b>",
+                        f"🔗 Ссылка: {code(src or '')}" if src else "🔗 Ссылка: -",
+                    ],
                 )
         except Exception as fallback_err:
             if label is not None:
-                logger.log_exception(
-                    fallback_err,
-                    module="send_helpers.send_music_if_any",
-                    user={"id": user_id, "username": label if label.startswith("@") else None},
-                    provider=type(provider).__name__,
-                    url=src,
-                    title="Ошибка скачивания музыки",
+                await log_event(
+                    message.bot,
+                    "dlerr",
+                    [
+                        "❌ Категория: <b>Ошибка скачивания</b>",
+                        f"👤 User/id: <b>{format_user_for_log(label, user_id)}</b>",
+                        "🧩 Стадия: <b>audio</b>",
+                        f"🧬 Тип: <b>{html_escape(exc_type_name(fallback_err))}</b>",
+                        f"🔗 Ссылка: {code(src or '')}" if src else "🔗 Ссылка: -",
+                        f"🧨 Причина: <b>{html_escape(clamp_reason(fallback_err))}</b>",
+                    ],
                 )
             raise
         finally:
             with contextlib.suppress(Exception):
                 tmp.unlink(missing_ok=True)
+
+
+async def send_description_if_any(message: Message, description: Optional[str]) -> None:
+    """
+    Отправляет описание (подпись/caption) TikTok-видео так же, как музыку:
+    - если текст помещается в сообщение Telegram — шлём обычным сообщением,
+      без изменения формата (как есть, без парсинга разметки);
+    - если текст слишком большой — шлём файлом (.txt), тоже без изменений.
+    """
+    if not description:
+        return
+    text = description.strip()
+    if not text:
+        return
+
+    try:
+        if len(text) <= DESCRIPTION_TG_LIMIT:
+            await message.answer(text)
+            return
+
+        tmp = Path(f"tmp_description_{message.chat.id}_{int(time.time())}.txt")
+        try:
+            tmp.write_text(text, encoding="utf-8")
+            await message.answer_document(FSInputFile(tmp, filename="description.txt"))
+        finally:
+            with contextlib.suppress(Exception):
+                tmp.unlink(missing_ok=True)
+    except Exception:
+        pass

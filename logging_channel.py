@@ -12,7 +12,7 @@ from aiogram import Bot
 from aiogram.types import LinkPreviewOptions
 
 from config import LOG_CHANNEL_ID, AUTO_SAVE_INTERVAL_SEC, log
-from helpers import html_escape, code, now_msk_str, pe
+from helpers import html_escape, code, now_msk_str
 from storage import store
 
 # ================== AUTOSAVE LOOP ==================
@@ -48,9 +48,25 @@ CAT_TAG = {
     "autoban": "autoban",
     "userban": "userban",
     "userunban": "userunban",
+    "adminadd": "adminadd",
+    "admindel": "admindel",
     "stars": "stars",
     "broadcast": "broadcast",
     "admin": "admin",
+}
+
+# Упрощённые логи: в канал шлём только то, что реально важно —
+# ошибки скачивания, баны/разбаны (ручные и авто) и назначение/снятие
+# администраторов. Всё остальное (скачивания видео/фото/музыки,
+# открытие меню, статистика, рассылки, просмотр админ-панели и т.п.)
+# в канал больше не шлётся — только считается в статистику/БД.
+ALLOWED_LOG_CATEGORIES = {
+    "dlerr",
+    "userban",
+    "userunban",
+    "autoban",
+    "adminadd",
+    "admindel",
 }
 
 def base_tag_for(category: str) -> str:
@@ -61,13 +77,7 @@ def numbered_tag_for(category: str) -> str:
     return f"#{CAT_TAG.get(category, 'log')}{seq}"
 
 def format_user_for_log(label: str, uid: int) -> str:
-    """
-    Кликабельное упоминание пользователя для логов.
-    Если есть username — ссылка https://t.me/username (кликабельна всегда).
-    Если username нет — tg://user?id=... (работает только если у админа есть
-    общий чат с пользователем; Telegram не даёт более надёжного способа
-    сослаться на человека без username и без диалога).
-    """
+    """Кликабельное упоминание: имя/юзернейм со ссылкой на профиль."""
     s = (label or "").strip()
     m = re.search(r"\((\d+)\)\s*$", s)
     name_part = s
@@ -75,17 +85,8 @@ def format_user_for_log(label: str, uid: int) -> str:
         name_part = s[:m.start()].strip()
     if not name_part:
         name_part = str(uid)
-
-    username = None
-    if name_part.startswith("@"):
-        username = name_part[1:].strip()
-
-    display = html_escape(name_part)
-    if username:
-        href = f"https://t.me/{username}"
-    else:
-        href = f"tg://user?id={uid}"
-    return f'<a href="{href}">{display}</a> ({code(uid)})'
+    # <a href="tg://user?id=..."> — кликабельно в Telegram (HTML parse mode)
+    return f'<a href="tg://user?id={uid}">{html_escape(name_part)}</a> ({code(uid)})'
 
 _log_queue: "asyncio.Queue[Tuple[int, str]]" = asyncio.Queue(maxsize=2000)
 _log_worker_task: Optional[asyncio.Task] = None
@@ -136,29 +137,22 @@ async def send_channel_log(_bot: Bot, text: str) -> None:
         pass
 
 async def log_event(bot: Bot, category: str, lines: List[str]) -> None:
+    if category not in ALLOWED_LOG_CATEGORIES:
+        return
     t_base = base_tag_for(category)
     t_num = numbered_tag_for(category)
     if category == "audiodl":
         t_base = "#audiodl #audiodl23"
     header = f"🧾 Лог: <b>{html_escape(category)}</b>\n🕒 {now_msk_str()}"
-    full_text = f"{t_base} {t_num}\n" + "\n".join([header, *lines])
-    await send_channel_log(bot, pe(full_text))
+    await send_channel_log(bot, f"{t_base} {t_num}\n" + "\n".join([header, *lines]))
 
 async def log_admin_action_to_channel(bot: Bot, title: str, lines: List[str]) -> None:
-    """
-    Совместимый шим: старый интерфейс (bot, title, lines[]) теперь
-    маршрутизируется через новый единый Logger (событие ADMIN).
-    lines обычно содержат пары вида "👤 Кто: <b>...</b>" — парсим их
-    в extra-словарь для единообразного оформления через build_message().
-    """
-    from logger import logger, Event
-    extra: Dict[str, str] = {}
-    for line in lines:
-        # Грубый парсинг "Метка: значение" из готовых HTML-строк старого формата
-        plain = re.sub(r"<[^>]+>", "", line)
-        if ":" in plain:
-            k, _, v = plain.partition(":")
-            extra[k.strip()] = v.strip()
-        else:
-            extra[plain.strip()] = ""
-    logger.log(Event.ADMIN, title, status="SUCCESS", extra=extra or None, force_telegram=True)
+    await log_event(
+        bot,
+        "admin",
+        [
+            "👑 Категория: <b>Админ-действие</b>",
+            f"🧩 Действие: <b>{html_escape(title)}</b>",
+            *lines,
+        ],
+    )

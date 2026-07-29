@@ -5,7 +5,7 @@
 import asyncio
 import io
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from aiogram import Bot
@@ -173,3 +173,46 @@ def stop_monthly_report() -> None:
     global _monthly_task
     if _monthly_task and not _monthly_task.done():
         _monthly_task.cancel()
+
+
+# =================== DAILY SUMMARY (лог-канал) ===================
+# Одно короткое сообщение в конце дня вместо потока мелких событий за весь день.
+_daily_task: asyncio.Task | None = None
+DAILY_SUMMARY_HOUR = 23
+DAILY_SUMMARY_MINUTE = 55
+
+
+async def daily_summary_loop(bot: Bot) -> None:
+    """Раз в сутки, в DAILY_SUMMARY_HOUR:DAILY_SUMMARY_MINUTE МСК, шлёт короткую сводку дня в лог-канал."""
+    from stats import daily_summary_text  # локальный импорт — избегаем цикла db_report <-> stats
+
+    while True:
+        try:
+            now = msk_now()
+            target = now.replace(hour=DAILY_SUMMARY_HOUR, minute=DAILY_SUMMARY_MINUTE, second=0, microsecond=0)
+            if target <= now:
+                target += timedelta(days=1)
+
+            wait = (target - now).total_seconds()
+            log.info("daily_summary: следующая сводка через %.0f сек (%s МСК)", wait, target.strftime("%Y-%m-%d %H:%M"))
+            await asyncio.sleep(max(60, wait))
+
+            await send_channel_log(bot, daily_summary_text() + "\n#daily_summary")
+
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            log.error("daily_summary_loop: %s", e)
+            await asyncio.sleep(3600)
+
+
+def start_daily_summary(bot: Bot) -> asyncio.Task:
+    global _daily_task
+    _daily_task = asyncio.create_task(daily_summary_loop(bot))
+    return _daily_task
+
+
+def stop_daily_summary() -> None:
+    global _daily_task
+    if _daily_task and not _daily_task.done():
+        _daily_task.cancel()

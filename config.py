@@ -57,7 +57,9 @@ STARS_MAX = int(os.getenv("STARS_MAX", "1000"))
 WAITING_STARS_TTL_SEC = 120
 
 # ========= GLOBAL LIMITS =========
-GLOBAL_CONCURRENCY = 8  # одновременных скачиваний на весь бот — не блокирует других пользователей очередью
+# Сколько скачиваний могут обрабатываться параллельно (а не одно за другим).
+# Раньше было = 1 (строгая очередь "один за раз, ~раз в минуту").
+GLOBAL_CONCURRENCY = int(os.getenv("GLOBAL_CONCURRENCY", "8"))
 
 # ========= SPAM LIMIT (тихий cooldown, без страйков) =========
 EVENT_WINDOW_SEC = 15
@@ -74,6 +76,11 @@ PHOTO_LIMIT_PER_MIN = 120
 
 # ========= AUTOSAVE =========
 AUTO_SAVE_INTERVAL_SEC = 5  # автосинхронизация раз в N сек
+
+# ========= DESCRIPTION (CAPTION TEXT) =========
+# Если описание видео влезает в это ограничение — шлём сообщением,
+# иначе — файлом (.txt), чтобы не обрезать текст.
+DESCRIPTION_TG_LIMIT = 3500
 
 # ========= VIDEO/AUDIO FALLBACK DOWNLOAD =========
 MAX_VIDEO_MB = int(os.getenv("MAX_VIDEO_MB", "60"))
@@ -97,9 +104,9 @@ BAN_REASON_DL = "Лимит скачиваний"
 BAN_REASON_PHOTO = "Лимит фото"
 
 # Подпись с указанием бота
-CAPTION_PHOTO = '<tg-emoji emoji-id="5774022692642492953">✅</tg-emoji> <b>Готово!</b> <tg-emoji emoji-id="6030466823290360017">🖼️</tg-emoji>\nПриятного просмотра <tg-emoji emoji-id="5935824500208702046">😎</tg-emoji>\n\n<tg-emoji emoji-id="6039420807900303010">📥</tg-emoji> Скачано в боте @tiksavesbot'
-CAPTION_VIDEO = '<tg-emoji emoji-id="5774022692642492953">✅</tg-emoji> <b>Готово!</b> <tg-emoji emoji-id="5937999673510858217">🎬</tg-emoji>\nПриятного просмотра <tg-emoji emoji-id="5935824500208702046">😎</tg-emoji>\n\n<tg-emoji emoji-id="6039420807900303010">📥</tg-emoji> Скачано в боте @tiksavesbot'
-CAPTION_AUDIO = '<tg-emoji emoji-id="5938473438468378529">🎵</tg-emoji> <b>Звук из TikTok</b>\n\n<tg-emoji emoji-id="6039420807900303010">📥</tg-emoji> Скачано в боте @tiksavesbot'
+CAPTION_PHOTO = "✅ <b>Готово!</b> 🖼️\nПриятного просмотра 😎\n\n📥 Скачано в боте @tiksavesbot"
+CAPTION_VIDEO = "✅ <b>Готово!</b> 🎬\nПриятного просмотра 😎\n\n📥 Скачано в боте @tiksavesbot"
+CAPTION_AUDIO = "🎵 <b>Звук из TikTok</b>\n\n📥 Скачано в боте @tiksavesbot"
 
 ALBUM_PAUSE_MIN = 0.4
 ALBUM_PAUSE_MAX = 0.8
@@ -107,8 +114,14 @@ ALBUM_PAUSE_MAX = 0.8
 BROADCAST_DELAY_SEC = 0.35
 BROADCAST_MAX_USERS = 5000
 
+PHOTO_WARNING_TEXT = (
+    "⚠️ <b>Важно</b>\n\n"
+    "Запрещено скачивать материалы, если у тебя нет прав/разрешения автора.\n"
+    "Используй только для своих видео/фото или с разрешением."
+)
+
 MSG_SPAM = "🛡 Флуд. Подожди ~{n} сек."
-MSG_DL = '<tg-emoji emoji-id="5891211339170326418">⏳</tg-emoji> Лимит скачиваний. Подожди ~{n} сек.'
+MSG_DL = "⏳ Лимит скачиваний. Подожди ~{n} сек."
 MSG_PHOTO = "📸 Лимит фото. Подожди ~{n} сек."
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
