@@ -11,7 +11,7 @@ from helpers import is_admin, parse_stats_mode
 from storage import store
 from user_label import resolve_user_label
 from gates import gate_callback
-from logging_channel import format_user_for_log
+from logging_channel import log_admin_action_to_channel, format_user_for_log
 from keyboards import (
     ADMIN_MENU_TEXT,
     ADMIN_HELP_TEXT,
@@ -102,8 +102,7 @@ async def admin_cb(call: CallbackQuery):
 
     if cmd == "banlist":
         bans = store.list_bans()
-        logger.log(Event.ADMIN, "Бан-лист (панель)", status="SUCCESS",
-            user={"id": uid}, extra={"Активных банов": len(bans)}, force_telegram=True)
+        await log_admin_action_to_channel(call.bot, "Бан-лист (кнопка)", [f"👤 Кто: <b>{format_user_for_log(label, uid)}</b>", f"🚫 Кол-во: <b>{len(bans)}</b>"])
         if call.message:
             with contextlib.suppress(Exception):
                 await call.message.edit_text(_admin_banlist_text(), parse_mode="HTML", reply_markup=admin_back_kb())
@@ -129,21 +128,18 @@ async def admin_cb(call: CallbackQuery):
         if call.message:
             with contextlib.suppress(Exception):
                 await call.message.edit_text("\n".join(lines), parse_mode="HTML", reply_markup=admin_back_kb())
-        logger.log(Event.ADMIN, "Список администраторов (панель)", user={"id": uid},
-            extra={"Доп. админов": len(extra)}, skip_telegram=True)
         await call.answer("Ок")
         return
 
     if cmd == "dbfile":
-        logger.log(Event.ADMIN, "Дамп БД запрошен (панель)", status="SUCCESS",
-            user={"id": uid}, force_telegram=True)
+        await log_admin_action_to_channel(call.bot, "Дамп БД (кнопка)", [f"👤 Кто: <b>{format_user_for_log(label, uid)}</b>"])
         await call.answer("Формирую дамп…")
         from db_report import send_db_json
         await send_db_json(call.bot, uid)
         return
 
     if cmd == "help":
-        logger.log(Event.ADMIN, "Открыта справка (панель)", user={"id": uid}, skip_telegram=True)
+        await log_admin_action_to_channel(call.bot, "Подсказка админ-панели (кнопка)", [f"👤 Кто: <b>{format_user_for_log(label, uid)}</b>"])
         if call.message:
             with contextlib.suppress(Exception):
                 await call.message.edit_text(ADMIN_HELP_TEXT, parse_mode="HTML", reply_markup=admin_back_kb())

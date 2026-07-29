@@ -12,8 +12,7 @@ from helpers import html_escape, code, is_admin, parse_duration, format_msk
 from storage import store
 from user_label import resolve_user_label
 from gates import gate_message
-from logging_channel import format_user_for_log
-from logger import logger, Event
+from logging_channel import log_event, log_admin_action_to_channel, format_user_for_log
 from admin_log_file import log_admin
 from keyboards import admin_broadcast_confirm_kb
 from broadcast import (
@@ -37,11 +36,9 @@ async def ban_cmd(message: Message):
     parts = (message.text or "").split(maxsplit=3)
     if len(parts) < 4 or not parts[1].isdigit():
         await message.answer(
-            pe(
-                "❌ Формат:\n"
-                f"{code('/ban 123 2h причина')}\n"
-                "Длительность: 30m, 6h, 2d, 1d12h, 3h30m"
-            ),
+            "❌ Формат:\n"
+            f"{code('/ban 123 2h причина')}\n"
+            "Длительность: 30m, 6h, 2d, 1d12h, 3h30m",
             parse_mode="HTML",
         )
         return
@@ -52,7 +49,7 @@ async def ban_cmd(message: Message):
 
     # Нельзя банить админов
     if is_admin(uid):
-        await message.answer(pe("❌ Нельзя банить администратора."), parse_mode="HTML")
+        await message.answer("❌ Нельзя банить администратора.", parse_mode="HTML")
         return
 
     existing = store.get_ban(uid)
@@ -62,12 +59,10 @@ async def ban_cmd(message: Message):
         who_label = await resolve_user_label(message.bot, uid)
         store.set_user_label(uid, who_label)
         await message.answer(
-            pe(
-                "ℹ️ Пользователь уже в бане.\n\n"
-                f"👤 Кого: <b>{format_user_for_log(who_label, uid)}</b>\n"
-                f"⏳ До: <b>{format_msk(until_existing)} МСК</b>\n"
-                f"📌 Причина: <b>{reason_existing}</b>"
-            ),
+            "ℹ️ Пользователь уже в бане.\n\n"
+            f"👤 Кого: <b>{format_user_for_log(who_label, uid)}</b>\n"
+            f"⏳ До: <b>{format_msk(until_existing)} МСК</b>\n"
+            f"📌 Причина: <b>{reason_existing}</b>",
             parse_mode="HTML",
         )
         return
@@ -75,7 +70,7 @@ async def ban_cmd(message: Message):
     try:
         seconds = parse_duration(dur_raw)
     except ValueError:
-        await message.answer(pe("❌ Неверное время. Пример: 2h, 30m, 1d12h"), parse_mode="HTML")
+        await message.answer("❌ Неверное время. Пример: 2h, 30m, 1d12h", parse_mode="HTML")
         return
 
     until = int(time.time()) + seconds
@@ -86,25 +81,23 @@ async def ban_cmd(message: Message):
     store.inc_ban()
     log_admin(admin_id, "ban", f"target={uid} until={until} reason={reason}")
 
-    logger.log(
-        Event.SECURITY, "Ручной бан",
-        status="FAIL",
-        user={"id": uid, "username": target_label if target_label.startswith("@") else None},
-        extra={
-            "Кто": format_user_for_log(admin_label, admin_id),
-            "До": format_msk(until) + " МСК",
-            "Причина": reason,
-        },
-        force_telegram=True,
+    await log_event(
+        message.bot,
+        "userban",
+        [
+            "🚫 Категория: <b>Блокировка (ручная)</b>",
+            f"🙅‍♂️ Кого: <b>{format_user_for_log(target_label, uid)}</b>",
+            f"👑 Кто: <b>{format_user_for_log(admin_label, admin_id)}</b>",
+            f"⏳ До: <b>{format_msk(until)} МСК</b>",
+            f"📌 Причина: <b>{html_escape(reason)}</b>",
+        ],
     )
 
     await message.answer(
-        pe(
-            "🛑 Пользователь забанен.\n\n"
-            f"👤 Кого: <b>{format_user_for_log(target_label, uid)}</b>\n"
-            f"⏳ До: <b>{format_msk(until)} МСК</b>\n"
-            f"📌 Причина: <b>{html_escape(reason)}</b>"
-        ),
+        "🛑 Пользователь забанен.\n\n"
+        f"👤 Кого: <b>{format_user_for_log(target_label, uid)}</b>\n"
+        f"⏳ До: <b>{format_msk(until)} МСК</b>\n"
+        f"📌 Причина: <b>{html_escape(reason)}</b>",
         parse_mode="HTML",
     )
 
@@ -122,7 +115,7 @@ async def unban_cmd(message: Message):
 
     parts = (message.text or "").split(maxsplit=1)
     if len(parts) != 2 or not parts[1].isdigit():
-        await message.answer(pe(f"Использование: {code('/unban 123')}"), parse_mode="HTML")
+        await message.answer(f"Использование: {code('/unban 123')}", parse_mode="HTML")
         return
 
     uid = int(parts[1])
@@ -133,20 +126,20 @@ async def unban_cmd(message: Message):
 
     log_admin(admin_id, "unban", f"target={uid} existed={existed}")
 
-    logger.log(
-        Event.SECURITY, "Разбан",
-        status="SUCCESS",
-        user={"id": uid, "username": target_label if target_label.startswith("@") else None},
-        extra={
-            "Кто": format_user_for_log(admin_label, admin_id),
-            "Был в бане": "да" if existed else "нет",
-        },
-        force_telegram=True,
+    await log_event(
+        message.bot,
+        "userunban",
+        [
+            "✅ Категория: <b>Разблокировка</b>",
+            f"🙋‍♂️ Кого: <b>{format_user_for_log(target_label, uid)}</b>",
+            f"👑 Кто: <b>{format_user_for_log(admin_label, admin_id)}</b>",
+            f"📍 Был в бане: <b>{'да' if existed else 'нет'}</b>",
+        ],
     )
     if existed:
-        await message.answer(pe(f"✅ Разбан: <b>{format_user_for_log(target_label, uid)}</b>"), parse_mode="HTML")
+        await message.answer(f"✅ Разбан: <b>{format_user_for_log(target_label, uid)}</b>", parse_mode="HTML")
     else:
-        await message.answer(pe(f"ℹ️ Пользователь не в бане: <b>{format_user_for_log(target_label, uid)}</b>"), parse_mode="HTML")
+        await message.answer(f"ℹ️ Пользователь не в бане: <b>{format_user_for_log(target_label, uid)}</b>", parse_mode="HTML")
 
 
 @dp.message(Command("banlist"))
@@ -162,15 +155,14 @@ async def banlist_cmd(message: Message):
 
     bans = store.list_bans()
     log_admin(admin_id, "banlist", f"count={len(bans)}")
-    logger.log(
-        Event.ADMIN, "Просмотр бан-листа",
-        status="SUCCESS",
-        user={"id": admin_id},
-        force_telegram=True,
+    await log_admin_action_to_channel(
+        message.bot,
+        "Просмотр бан-листа",
+        [f"👤 Кто: <b>{format_user_for_log(admin_label, admin_id)}</b>", f"🚫 Кол-во: <b>{len(bans)}</b>"],
     )
 
     if not bans:
-        await message.answer(pe("✅ Активных банов нет."), parse_mode="HTML")
+        await message.answer("✅ Активных банов нет.")
         return
 
     lines = ["🚫 <b>Активные баны</b>\n\n"]
@@ -180,7 +172,7 @@ async def banlist_cmd(message: Message):
             f"• <b>{format_user_for_log(who_label, uid2)}</b> - до <b>{format_msk(until)} МСК</b>\n"
             f"  Причина: <i>{html_escape(reason)}</i>\n\n"
         )
-    await message.answer(pe("".join(lines)), parse_mode="HTML")
+    await message.answer("".join(lines), parse_mode="HTML")
 
 
 @dp.message(Command("baninfo"))
@@ -196,7 +188,7 @@ async def baninfo_cmd(message: Message):
 
     parts = (message.text or "").split(maxsplit=1)
     if len(parts) != 2 or not parts[1].isdigit():
-        await message.answer(pe(f"Использование: {code('/baninfo 123')}"), parse_mode="HTML")
+        await message.answer(f"Использование: {code('/baninfo 123')}", parse_mode="HTML")
         return
 
     uid = int(parts[1])
@@ -205,15 +197,17 @@ async def baninfo_cmd(message: Message):
     store.set_user_label(uid, who_label)
 
     log_admin(admin_id, "baninfo", f"target={uid} banned={'yes' if ban else 'no'}")
-    logger.log(
-        Event.ADMIN, "Просмотр бана",
-        status="SUCCESS",
-        user={"id": admin_id},
-        force_telegram=True,
+    await log_admin_action_to_channel(
+        message.bot,
+        "Просмотр бана",
+        [
+            f"👤 Кто: <b>{format_user_for_log(admin_label, admin_id)}</b>",
+            f"🙋‍♂️ Кого: <b>{format_user_for_log(who_label, uid)}</b>",
+        ],
     )
 
     if not ban:
-        await message.answer(pe(f"ℹ️ Не в бане: <b>{format_user_for_log(who_label, uid)}</b>"), parse_mode="HTML")
+        await message.answer(f"ℹ️ Не в бане: <b>{format_user_for_log(who_label, uid)}</b>", parse_mode="HTML")
         return
 
     until = int(ban.get("until", 0))
@@ -222,13 +216,11 @@ async def baninfo_cmd(message: Message):
     by_label = store.get_user_label(by)
 
     await message.answer(
-        pe(
-            "🚫 <b>Информация о бане</b>\n\n"
-            f"👤 Пользователь: <b>{format_user_for_log(who_label, uid)}</b>\n"
-            f"⏳ До: <b>{format_msk(until)} МСК</b>\n"
-            f"📌 Причина: <b>{reason}</b>\n"
-            f"👑 Кто выдал: <b>{format_user_for_log(by_label, by)}</b>"
-        ),
+        "🚫 <b>Информация о бане</b>\n\n"
+        f"👤 Пользователь: <b>{format_user_for_log(who_label, uid)}</b>\n"
+        f"⏳ До: <b>{format_msk(until)} МСК</b>\n"
+        f"📌 Причина: <b>{reason}</b>\n"
+        f"👑 Кто выдал: <b>{format_user_for_log(by_label, by)}</b>",
         parse_mode="HTML",
     )
 
@@ -246,7 +238,7 @@ async def info_cmd(message: Message):
 
     parts = (message.text or "").split(maxsplit=1)
     if len(parts) != 2:
-        await message.answer(pe(f"Использование: {code('/info 123')} или {code('/info @username')}"), parse_mode="HTML")
+        await message.answer(f"Использование: {code('/info 123')} или {code('/info @username')}", parse_mode="HTML")
         return
 
     raw = parts[1].strip()
@@ -266,7 +258,7 @@ async def info_cmd(message: Message):
                     found_uid = int(uid_str)
                     break
             if found_uid is None:
-                await message.answer(pe("❌ Пользователь не найден. Проверь ID или username."), parse_mode="HTML")
+                await message.answer("❌ Пользователь не найден. Проверь ID или username.", parse_mode="HTML")
                 return
             uid = found_uid
     who_label = await resolve_user_label(message.bot, uid)
@@ -281,6 +273,8 @@ async def info_cmd(message: Message):
     rec = us_dl.get(str(uid), {}) or {}
     v_sent = int(rec.get("video_sent", 0))
     p_sent = int(rec.get("photos_sent", 0))
+    v_ops = int(rec.get("video_ops", 0))
+    p_ops = int(rec.get("photo_ops", 0))
     a_sent = int(rec.get("audio_sent", 0))
 
     stars_by_user = (store.data.get("user_stats", {}) or {}).get("stars", {}) or {}
@@ -288,33 +282,20 @@ async def info_cmd(message: Message):
 
     ban = store.get_ban(uid)
     if ban:
-        status_text = f"🚫 Заблокирован до <b>{format_msk(int(ban.get('until', 0)))} МСК</b>"
+        ban_text = f"🚫 Бан: <b>да</b> (до <b>{format_msk(int(ban.get('until', 0)))} МСК</b>)"
     else:
-        status_text = "Не заблокирован ✅"
-
-    info_user = (store.data.get("users_info", {}) or {}).get(str(uid), {})
-    username = info_user.get("username")
-    username_line = f"👤 Username: @{html_escape(username)}\n" if username else ""
+        ban_text = "🚫 Бан: <b>нет</b>"
 
     await message.answer(
-        pe(
-            "👤 <b>Информация о пользователе</b>\n\n"
-            f"🆔 ID: <b>{uid}</b>\n"
-            f"{username_line}"
-            f"<a href=\"tg://user?id={uid}\">Открыть профиль</a>\n\n"
-            "━━━━━━━━━━━━━━━\n\n"
-            f"🗓 Первый визит\n└ {joined}\n\n"
-            f"🕒 Последняя активность\n└ {last_seen}\n\n"
-            f"🚫 Статус\n└ {status_text}\n\n"
-            "━━━━━━━━━━━━━━━\n\n"
-            "📥 <b>Статистика</b>\n\n"
-            f"🎬 Видео: {v_sent}\n"
-            f"🖼 Фото: {p_sent}\n"
-            f"🎵 Музыка: {a_sent}\n\n"
-            f"⭐ Пожертвовано:\n{stars} Stars\n\n"
-            "━━━━━━━━━━━━━━━\n\n"
-            "🤖 TIKSAVES"
-        ),
+        "👤 <b>Информация о пользователе</b>\n\n"
+        f"👤 Пользователь: <b>{format_user_for_log(who_label, uid)}</b>\n"
+        f"🕒 Первый визит: <b>{joined}</b>\n"
+        f"🕒 Последняя активность: <b>{last_seen}</b>\n"
+        f"{ban_text}\n\n"
+        f"🎬 Видео скачано: <b>{v_ops}</b> операций (файлов: <b>{v_sent}</b>)\n"
+        f"🖼️ Фото скачано: <b>{p_ops}</b> операций (фото: <b>{p_sent}</b>)\n"
+        f"🎵 Музыка скачано: <b>{a_sent}</b>\n"
+        f"⭐ Stars пожертвовано: <b>{stars}</b>\n",
         parse_mode="HTML",
     )
 
@@ -330,43 +311,63 @@ async def broadcast_cmd(message: Message):
     if not await gate_message(message, admin_label):
         return
 
-    from broadcast import broadcast_wizard
-    broadcast_wizard[admin_id] = {"step": "text", "text": None, "photo": None, "pin": False}
-    log_admin(admin_id, "broadcast_wizard_start")
+    # Extract text after /broadcast, preserving Telegram entities as HTML
+    from aiogram.utils.text_decorations import html_decoration
+    msg_text = message.text or ""
+    msg_entities = message.entities or []
+
+    # Find where the command word ends (first space after /broadcast)
+    cmd_end = msg_text.find(" ")
+    if cmd_end == -1:
+        await message.answer("❌ Пример:\n" f"{code('/broadcast Текст рассылки')}", parse_mode="HTML")
+        return
+
+    # text_offset is the character position where broadcast text begins (skip leading spaces)
+    text_offset = cmd_end + 1
+    broadcast_raw = msg_text[text_offset:]
+    # Strip leading whitespace and adjust offset accordingly
+    lstripped = broadcast_raw.lstrip()
+    if not lstripped:
+        await message.answer("❌ Пример:\n" f"{code('/broadcast Текст рассылки')}", parse_mode="HTML")
+        return
+    text_offset += len(broadcast_raw) - len(lstripped)
+    broadcast_raw = lstripped
+
+    # Shift and filter entities that belong to broadcast text (after the command)
+    shifted_entities = []
+    for ent in msg_entities:
+        ent_start = ent.offset
+        ent_end = ent.offset + ent.length
+        if ent_end <= text_offset:
+            continue  # entity is part of the command word, skip
+        new_offset = max(0, ent_start - text_offset)
+        # Clamp length so entity doesn't go out of broadcast_raw bounds
+        new_length = min(ent.length, len(broadcast_raw) - new_offset)
+        if new_length <= 0:
+            continue
+        shifted_ent = type(ent)(
+            **{**ent.model_dump(), "offset": new_offset, "length": new_length}
+        )
+        shifted_entities.append(shifted_ent)
+
+    # Convert entities to HTML
+    try:
+        broadcast_html = html_decoration.unparse(broadcast_raw, shifted_entities)
+    except Exception:
+        broadcast_html = html_escape(broadcast_raw)
+
+    pending_admin_broadcast[admin_id] = "custom"
+    pending_admin_broadcast_text[admin_id] = broadcast_html
+    pending_admin_broadcast_source[admin_id] = "cmd"
+    users_cnt = len(store.data.get("users", []))
     await message.answer(
-        pe(
-            "📣 <b>Новая рассылка</b>\n\n"
-            "Шаг 1/3: пришлите текст рассылки."
-        ),
+        "📣 <b>Подтверждение рассылки</b>\n\n"
+        "Тип: <b>Своя рассылка</b>\n"
+        f"Получателей: <b>{users_cnt}</b>\n\n"
+        "Отправить?",
         parse_mode="HTML",
+        reply_markup=admin_broadcast_confirm_kb("custom"),
     )
-
-
-@dp.message(Command("undo_broadcast"))
-async def undo_broadcast_cmd(message: Message):
-    admin_id = message.from_user.id
-    admin_label = await resolve_user_label(message.bot, admin_id)
-    store.set_user_label(admin_id, admin_label)
-
-    if not is_admin(admin_id):
-        return
-    if not await gate_message(message, admin_label):
-        return
-
-    from broadcast import undo_last_broadcast
-    status = await message.answer(pe("⏳ Удаляю последнюю рассылку…"), parse_mode="HTML")
-    removed = await undo_last_broadcast(admin_id, message.bot)
-    if removed == -1:
-        await status.edit_text(pe("❌ Нет данных о последней рассылке (или бот был перезапущен)."), parse_mode="HTML")
-        return
-    log_admin(admin_id, "undo_broadcast", f"removed={removed}")
-    logger.log(
-        Event.ADMIN, "Удалена рассылка",
-        status="SUCCESS",
-        user={"id": admin_id},
-        force_telegram=True,
-    )
-    await status.edit_text(pe(f"✅ Рассылка удалена у {removed} пользователей."), parse_mode="HTML")
 
 
 @dp.message(Command("reminder_message"))
@@ -385,12 +386,10 @@ async def reminder_message_cmd(message: Message):
     pending_admin_broadcast_source[admin_id] = "cmd"
     users_cnt = len(store.data.get("users", []))
     await message.answer(
-        pe(
-            "📣 <b>Подтверждение рассылки</b>\n\n"
-            "Тип: <b>Напоминание</b>\n"
-            f"Получателей: <b>{users_cnt}</b>\n\n"
-            "Отправить?"
-        ),
+        "📣 <b>Подтверждение рассылки</b>\n\n"
+        "Тип: <b>Напоминание</b>\n"
+        f"Получателей: <b>{users_cnt}</b>\n\n"
+        "Отправить?",
         parse_mode="HTML",
         reply_markup=admin_broadcast_confirm_kb("reminder"),
     )
@@ -412,12 +411,10 @@ async def advertisement_message_cmd(message: Message):
     pending_admin_broadcast_source[admin_id] = "cmd"
     users_cnt = len(store.data.get("users", []))
     await message.answer(
-        pe(
-            "📣 <b>Подтверждение рассылки</b>\n\n"
-            "Тип: <b>Реклама</b>\n"
-            f"Получателей: <b>{users_cnt}</b>\n\n"
-            "Отправить?"
-        ),
+        "📣 <b>Подтверждение рассылки</b>\n\n"
+        "Тип: <b>Реклама</b>\n"
+        f"Получателей: <b>{users_cnt}</b>\n\n"
+        "Отправить?",
         parse_mode="HTML",
         reply_markup=admin_broadcast_confirm_kb("advert"),
     )
@@ -437,9 +434,9 @@ async def dblog_cmd(message: Message):
 
     from db_report import send_db_report
     log_admin(admin_id, "dblog", "manual db report requested")
-    await message.answer(pe("📊 Генерирую отчёт…"), parse_mode="HTML")
+    await message.answer("📊 Генерирую отчёт…")
     await send_db_report(message.bot, title="Отчёт БД (ручной запрос)")
-    await message.answer(pe("✅ Отчёт-файл отправлен в лог-канал."), parse_mode="HTML")
+    await message.answer("✅ Отчёт-файл отправлен в лог-канал.")
 
 
 @dp.message(Command("dbfile"))
@@ -456,15 +453,14 @@ async def dbfile_cmd(message: Message):
 
     from db_report import send_db_json
     log_admin(admin_id, "dbfile", "manual db dump requested")
-    logger.log(
-        Event.ADMIN, "Запрошен дамп БД",
-        status="SUCCESS",
-        user={"id": admin_id},
-        force_telegram=True,
+    await log_admin_action_to_channel(
+        message.bot,
+        "Запрошен дамп БД",
+        [f"👤 Кто: <b>{format_user_for_log(admin_label, admin_id)}</b>"],
     )
-    await message.answer(pe("🗄 Формирую дамп БД…"), parse_mode="HTML")
+    await message.answer("🗄 Формирую дамп БД…")
     await send_db_json(message.bot, admin_id)
-    await message.answer(pe("✅ Файл отправлен."), parse_mode="HTML")
+    await message.answer("✅ Файл отправлен.")
 
 
 @dp.message(Command("adminadd"))
@@ -485,7 +481,7 @@ async def adminadd_cmd(message: Message):
 
     parts = (message.text or "").split(maxsplit=1)
     if len(parts) != 2 or not parts[1].strip().isdigit():
-        await message.answer(pe(f"Использование: {code('/adminadd 123456789')}"), parse_mode="HTML")
+        await message.answer(f"Использование: {code('/adminadd 123456789')}", parse_mode="HTML")
         return
 
     uid = int(parts[1].strip())
@@ -496,19 +492,22 @@ async def adminadd_cmd(message: Message):
     log_admin(admin_id, "adminadd", f"target={uid} success={added}")
 
     if added:
-        logger.log(
-        Event.ADMIN, "Добавление администратора",
-        status="SUCCESS",
-        user={"id": admin_id},
-        force_telegram=True,
-    )
+        await log_event(
+            message.bot,
+            "adminadd",
+            [
+                "👑 Категория: <b>Назначение администратора</b>",
+                f"👤 Кто: <b>{format_user_for_log(admin_label, admin_id)}</b>",
+                f"➕ Новый админ: <b>{format_user_for_log(target_label, uid)}</b>",
+            ],
+        )
         await message.answer(
-            pe(f"✅ Администратор добавлен: <b>{format_user_for_log(target_label, uid)}</b>"),
+            f"✅ Администратор добавлен: <b>{format_user_for_log(target_label, uid)}</b>",
             parse_mode="HTML",
         )
     else:
         await message.answer(
-            pe(f"ℹ️ Уже является администратором: <b>{format_user_for_log(target_label, uid)}</b>"),
+            f"ℹ️ Уже является администратором: <b>{format_user_for_log(target_label, uid)}</b>",
             parse_mode="HTML",
         )
 
@@ -531,12 +530,12 @@ async def admindel_cmd(message: Message):
 
     parts = (message.text or "").split(maxsplit=1)
     if len(parts) != 2 or not parts[1].strip().isdigit():
-        await message.answer(pe(f"Использование: {code('/admindel 123456789')}"), parse_mode="HTML")
+        await message.answer(f"Использование: {code('/admindel 123456789')}", parse_mode="HTML")
         return
 
     uid = int(parts[1].strip())
     if uid in ADMINS:
-        await message.answer(pe("❌ Нельзя удалить суперадмина (прописан в config)."), parse_mode="HTML")
+        await message.answer("❌ Нельзя удалить суперадмина (прописан в config).", parse_mode="HTML")
         return
 
     target_label = store.get_user_label(uid)
@@ -544,19 +543,22 @@ async def admindel_cmd(message: Message):
     log_admin(admin_id, "admindel", f"target={uid} success={removed}")
 
     if removed:
-        logger.log(
-        Event.ADMIN, "Удаление администратора",
-        status="SUCCESS",
-        user={"id": admin_id},
-        force_telegram=True,
-    )
+        await log_event(
+            message.bot,
+            "admindel",
+            [
+                "🚫 Категория: <b>Снятие администратора</b>",
+                f"👤 Кто: <b>{format_user_for_log(admin_label, admin_id)}</b>",
+                f"➖ Снят админ: <b>{format_user_for_log(target_label, uid)}</b>",
+            ],
+        )
         await message.answer(
-            pe(f"✅ Администратор удалён: <b>{format_user_for_log(target_label, uid)}</b>"),
+            f"✅ Администратор удалён: <b>{format_user_for_log(target_label, uid)}</b>",
             parse_mode="HTML",
         )
     else:
         await message.answer(
-            pe(f"ℹ️ Не является дополнительным администратором: <b>{format_user_for_log(target_label, uid)}</b>"),
+            f"ℹ️ Не является дополнительным администратором: <b>{format_user_for_log(target_label, uid)}</b>",
             parse_mode="HTML",
         )
 
@@ -573,35 +575,21 @@ async def adminlist_cmd(message: Message):
         return
 
     from config import ADMINS
-    # Пункт 11: [5807868868886009920] для заголовка, [5778570255555105942] для суперадминов, [6039496266180726678] для дополнительных
-    lines = [
-        '<tg-emoji emoji-id="5807868868886009920">🔌</tg-emoji> <b>Администраторы</b>',
-        "━━━━━━━━━━━━━━━━━━━━",
-        "",
-        '<tg-emoji emoji-id="5778570255555105942">🔒</tg-emoji> <b>Суперадмины:</b>',
-    ]
+    lines = ["👑 <b>Список администраторов</b>\n"]
+
+    lines.append("🔒 <b>Суперадмины (config):</b>")
     for uid2 in sorted(ADMINS):
         lbl = store.get_user_label(uid2)
-        lines.append(f"  └ {format_user_for_log(lbl, uid2)}")
+        lines.append(f"  • <b>{format_user_for_log(lbl, uid2)}</b>")
 
     extra = store.get_extra_admins()
-    lines.append("")
-    lines.append(f'<tg-emoji emoji-id="6039496266180726678">➕</tg-emoji> <b>Дополнительные ({len(extra)}):</b>')
+    lines.append(f"\n➕ <b>Дополнительные ({len(extra)}):</b>")
     if extra:
         for uid2 in sorted(extra):
             lbl = store.get_user_label(uid2)
-            lines.append(f"  └ {format_user_for_log(lbl, uid2)}")
+            lines.append(f"  • <b>{format_user_for_log(lbl, uid2)}</b>")
     else:
         lines.append("  <i>нет</i>")
 
-    lines.append("")
-    lines.append(f"Управление: {code('/adminadd ID')} · {code('/admindel ID')}")
-
     log_admin(admin_id, "adminlist", f"extra_count={len(extra)}")
-    logger.log(
-        Event.ADMIN, "Просмотр списка администраторов",
-        status="SUCCESS",
-        user={"id": admin_id},
-        force_telegram=True,
-    )
     await message.answer("\n".join(lines), parse_mode="HTML")

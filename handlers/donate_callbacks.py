@@ -14,14 +14,12 @@ from aiogram.types import CallbackQuery, Message, PreCheckoutQuery, LinkPreviewO
 from globals_state import dp
 import globals_state
 from config import STARS_MIN, STARS_MAX
-from helpers import code
 from storage import store
 from user_label import resolve_user_label
 from gates import gate_callback, gate_message
-from logging_channel import format_user_for_log
-from logger import logger, Event
-from send_helpers import send_music_if_any, send_description
-from picker_state import last_audio_url, last_video_src, last_video_desc
+from logging_channel import log_event, format_user_for_log
+from send_helpers import send_music_if_any, send_description_if_any
+from picker_state import last_audio_url, last_video_src, last_description
 from keyboards import (
     DONATE_TEXT,
     STARS_MENU_TEXT,
@@ -52,24 +50,20 @@ async def dl_cb(call: CallbackQuery):
         await send_music_if_any(call.message, globals_state.g_provider, url, uid=uid, label=label, src=last_video_src.get(uid))
         with contextlib.suppress(Exception):
             if call.message:
-                await call.message.edit_reply_markup(reply_markup=under_video_kb(has_music=False, has_desc=bool(last_video_desc.get(uid))))
+                await call.message.edit_reply_markup(reply_markup=under_video_kb(has_music=False, has_description=uid in last_description))
         return
 
     if action == "desc":
-        desc = last_video_desc.pop(uid, None)
+        desc = last_description.pop(uid, None)
+        if not desc:
+            await call.answer("Нет описания для этого видео.", show_alert=True)
+            return
         await call.answer("Отправляю описание…")
-        sent = await send_description(call.message, desc, uid=uid)
+        if call.message:
+            await send_description_if_any(call.message, desc)
         with contextlib.suppress(Exception):
             if call.message:
-                has_music = uid in last_audio_url
-                await call.message.edit_reply_markup(reply_markup=under_video_kb(has_music=has_music, has_desc=False))
-        if sent:
-            logger.log(
-                Event.DOWNLOAD, "Описание скачано (видео)",
-                status="SUCCESS",
-                user={"id": uid, "username": label if label.startswith("@") else None},
-                content={"type": "description", "source": last_video_src.get(uid) or ""},
-            )
+                await call.message.edit_reply_markup(reply_markup=under_video_kb(has_music=uid in last_audio_url, has_description=False))
         return
 
     await call.answer()
@@ -159,16 +153,18 @@ async def payment_ok(message: Message):
     store.add_stars(uid, stars)
 
     await message.answer(
-        pe("✅ <b>Оплата прошла!</b>\n"
+        "✅ <b>Оплата прошла!</b>\n"
         f"Получено: <b>{stars} ⭐</b>\n\n"
-        "Спасибо за поддержку 💛"),
+        "Спасибо за поддержку 🙌",
         parse_mode="HTML",
     )
 
-    logger.log(
-        Event.DONATE, "Донат через Stars",
-        status="SUCCESS",
-        user={"id": uid, "username": label if label.startswith("@") else None},
-        extra={"Stars": stars},
-        force_telegram=True,
+    await log_event(
+        message.bot,
+        "stars",
+        [
+            "⭐ Категория: <b>Пополнение Stars</b>",
+            f"👤 User/id: <b>{format_user_for_log(label, uid)}</b>",
+            f"💫 Сумма: <b>{stars} ⭐</b>",
+        ],
     )

@@ -17,8 +17,7 @@ from helpers import code
 from storage import store
 from user_label import resolve_user_label
 from gates import gate_callback
-from logging_channel import format_user_for_log
-from logger import logger, Event
+from logging_channel import log_event, format_user_for_log
 from send_helpers import send_video_smart, send_music_if_any
 from picker_state import pending_video, cleanup_pending_video, last_audio_url
 from keyboards import under_video_kb
@@ -79,11 +78,14 @@ async def video_choice_cb(call: CallbackQuery):
                 reply_markup=under_video_kb(has_music=has_music),
             )
             store.inc_download(uid, "video", items=1)
-            logger.log(
-                Event.DOWNLOAD, "Видео скачано",
-                status="SUCCESS",
-                user={"id": uid, "username": label if label.startswith("@") else None},
-                content={"type": "video", "source": st.get("src") or ""},
+            await log_event(
+                call.bot,
+                "videodl",
+                [
+                    "🎬 Категория: <b>Скачивание видео</b>",
+                    f"👤 User/id: <b>{format_user_for_log(label, uid)}</b>",
+                    f"🔗 Ссылка: {code(st.get('src') or '')}" if st.get("src") else "🔗 Ссылка: -",
+                ],
             )
         with contextlib.suppress(Exception):
             await call.message.delete()
