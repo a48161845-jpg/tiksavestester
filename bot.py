@@ -5,19 +5,19 @@
 import asyncio
 import contextlib
 import time
-from typing import Optional
+from typing import Optional, List
 
 import aiohttp
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
-from config import BOT_TOKEN, ALT_PROVIDER, GLOBAL_CONCURRENCY, ADMINS, log
+from config import BOT_TOKEN, ALT_PROVIDER, ENABLE_TIKLYDOWN, GLOBAL_CONCURRENCY, ADMINS, log
 from helpers import now_msk_str, html_escape
 from storage import store, init_db, close_db
 import globals_state
 from globals_state import dp
-from providers import TikWMClient, ApifyProvider, BaseProvider, ProviderSwitcher
+from providers import TikWMClient, TiklyDownProvider, ApifyProvider, BaseProvider, ProviderSwitcher
 from logging_channel import autosave_loop, start_log_worker, stop_log_worker, send_channel_log
 from broadcast import broadcast_schedule_loop
 from db_report import start_monthly_report, stop_monthly_report, start_daily_summary, stop_daily_summary
@@ -47,11 +47,18 @@ async def main():
         bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
         primary = TikWMClient(session, bot=bot)
-        secondary: Optional[BaseProvider] = None
-        if ALT_PROVIDER == "apify":
-            secondary = ApifyProvider(session, bot)
+        providers: List[BaseProvider] = [primary]
+        provider_names = ["tikwm (осн.)"]
 
-        switcher = ProviderSwitcher(primary, secondary, bot)
+        if ENABLE_TIKLYDOWN:
+            providers.append(TiklyDownProvider(session, bot=bot))
+            provider_names.append("tiklydown (резерв, бесплатный)")
+
+        if ALT_PROVIDER == "apify":
+            providers.append(ApifyProvider(session, bot))
+            provider_names.append("apify (резерв, платный)")
+
+        switcher = ProviderSwitcher(providers, bot)
         globals_state.set_global_provider(primary)
 
         await start_log_worker(bot)
@@ -68,7 +75,7 @@ async def main():
             me = await bot.get_me()
             bans_active = len(store.list_bans())
             admins_total = len(ADMINS) + len(store.get_extra_admins())
-            provider_line = "tikwm (осн.)" + (" + apify (резерв)" if secondary else "")
+            provider_line = " + ".join(provider_names)
             await send_channel_log(
                 bot,
                 "🚀 <b>Бот запущен</b>\n"

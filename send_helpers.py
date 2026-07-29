@@ -185,9 +185,12 @@ async def send_music_if_any(
 async def send_description_if_any(message: Message, description: Optional[str]) -> None:
     """
     Отправляет описание (подпись/caption) TikTok-видео так же, как музыку:
-    - если текст помещается в сообщение Telegram — шлём обычным сообщением,
-      без изменения формата (как есть, без парсинга разметки);
-    - если текст слишком большой — шлём файлом (.txt), тоже без изменений.
+    - если текст помещается в сообщение Telegram — шлём моно-блоком (<pre>),
+      чтобы его можно было скопировать целиком тапом, как код;
+    - если текст слишком большой — шлём файлом (.txt).
+    Содержимое не меняется (экранируем только служебные HTML-символы,
+    чтобы Telegram не пытался распарсить их как разметку — раньше из-за
+    этого длинные описания с "&"/"<"/">" молча не отправлялись).
     """
     if not description:
         return
@@ -197,7 +200,7 @@ async def send_description_if_any(message: Message, description: Optional[str]) 
 
     try:
         if len(text) <= DESCRIPTION_TG_LIMIT:
-            await message.answer(text)
+            await message.answer(f"<pre>{html_escape(text)}</pre>", parse_mode="HTML")
             return
 
         tmp = Path(f"tmp_description_{message.chat.id}_{int(time.time())}.txt")
@@ -207,5 +210,19 @@ async def send_description_if_any(message: Message, description: Optional[str]) 
         finally:
             with contextlib.suppress(Exception):
                 tmp.unlink(missing_ok=True)
-    except Exception:
-        pass
+    except Exception as e:
+        # Раньше ошибка тут проглатывалась молча — пользователь ничего не видел.
+        # Теперь сообщаем и логируем причину.
+        with contextlib.suppress(Exception):
+            await message.answer("❌ Не удалось отправить описание. Попробуй ещё раз.")
+        with contextlib.suppress(Exception):
+            await log_event(
+                message.bot,
+                "dlerr",
+                [
+                    "❌ Категория: <b>Ошибка скачивания</b>",
+                    "🧩 Стадия: <b>description</b>",
+                    f"🧬 Тип: <b>{html_escape(exc_type_name(e))}</b>",
+                    f"🧨 Причина: <b>{html_escape(clamp_reason(e))}</b>",
+                ],
+            )

@@ -98,6 +98,12 @@ ALT_PROVIDER = os.getenv("ALT_PROVIDER", "none").strip().lower()
 APIFY_TOKEN = os.getenv("APIFY_TOKEN", "").strip()
 APIFY_ACTOR = os.getenv("APIFY_ACTOR", "apilabs/tiktok-downloader").strip()
 
+# Бесплатный запасной источник без ключа (доп. звено цепочки провайдеров).
+# Если у него сменится схема ответа/адрес — можно выключить через .env
+# (ENABLE_TIKLYDOWN=0), не трогая код.
+TIKLYDOWN_URL = os.getenv("TIKLYDOWN_URL", "https://api.tiklydown.eu.org/api/download").strip()
+ENABLE_TIKLYDOWN = os.getenv("ENABLE_TIKLYDOWN", "1").strip() != "0"
+
 BAN_DURATION_SEC = int(os.getenv("BAN_DURATION_SEC", str(24 * 3600)))  # 24 часа по умолчанию
 BAN_REASON_SPAM = "Авто-бан: спам/флуд"
 BAN_REASON_DL = "Лимит скачиваний"

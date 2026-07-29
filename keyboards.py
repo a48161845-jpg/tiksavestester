@@ -248,6 +248,9 @@ def admin_menu_kb() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="📢 Реклама", callback_data="ad:advert"),
             ],
             [
+                InlineKeyboardButton(text="✍️ Своя рассылка", callback_data="ad:customtext"),
+            ],
+            [
                 InlineKeyboardButton(text="👑 Администраторы", callback_data="ad:adminlist"),
             ],
             [
@@ -276,6 +279,7 @@ ADMIN_MENU_TEXT = (
     "🗄 <b>Дамп БД</b> — скачать базу данных\n"
     "👑 <b>Администраторы</b> — список и управление\n"
     "📌 <b>Напоминание</b> / 📢 <b>Реклама</b> — рассылки\n"
+    "✍️ <b>Своя рассылка</b> — с сохранением форматирования (жирный/курсив/моно/ссылки)\n"
     "🧾 <b>Команды</b> — полный список\n"
 )
 

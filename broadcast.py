@@ -22,6 +22,12 @@ pending_admin_broadcast_text: Dict[int, str] = {}
 pending_admin_broadcast_source: Dict[int, str] = {}
 pending_admin_broadcast_cancel: Dict[int, bool] = {}
 
+# uid -> timestamp: ждём от админа следующее сообщение как текст рассылки
+# (с сохранением форматирования — жирный/курсив/моно и т.п., применённого
+# через выделение текста в Telegram).
+waiting_custom_broadcast: Dict[int, float] = {}
+WAITING_CUSTOM_BROADCAST_TTL_SEC = 300
+
 # ================== PRESET TEXTS ==================
 REMINDER_MSG = (
     "**Напоминание** 📌\n\n"
