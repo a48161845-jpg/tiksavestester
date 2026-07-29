@@ -4,6 +4,7 @@
 import time
 from typing import Optional
 
+from aiogram import F
 from aiogram.filters import Command
 from aiogram.types import Message
 
@@ -19,6 +20,8 @@ from broadcast import (
     pending_admin_broadcast,
     pending_admin_broadcast_text,
     pending_admin_broadcast_source,
+    waiting_custom_broadcast,
+    WAITING_CUSTOM_BROADCAST_TTL_SEC,
 )
 
 
@@ -300,6 +303,57 @@ async def info_cmd(message: Message):
     )
 
 
+def _waiting_for_custom_broadcast(message: Message) -> bool:
+    uid = message.from_user.id if message.from_user else None
+    if not uid:
+        return False
+    ts = waiting_custom_broadcast.get(uid)
+    if not ts:
+        return False
+    if time.time() - ts > WAITING_CUSTOM_BROADCAST_TTL_SEC:
+        waiting_custom_broadcast.pop(uid, None)
+        return False
+    return True
+
+
+@dp.message(F.text, _waiting_for_custom_broadcast)
+async def custom_broadcast_text_msg(message: Message):
+    """
+    Ловит следующее сообщение админа после нажатия "✍️ Своя рассылка" в панели.
+    В отличие от /broadcast (где нужно вручную отрезать текст команды),
+    тут всё сообщение целиком — это текст рассылки, поэтому форматирование
+    (жирный/курсив/моно/ссылки и т.п., применённое через выделение текста
+    в Telegram) просто берём из message.html_text без всякой ручной магии
+    со сдвигом entity — надёжнее и без риска сломать разметку по краям.
+    """
+    admin_id = message.from_user.id
+    waiting_custom_broadcast.pop(admin_id, None)
+
+    if not is_admin(admin_id):
+        return
+
+    text_raw = (message.text or "").strip()
+    if not text_raw:
+        await message.answer("❌ Пустое сообщение, рассылка отменена.")
+        return
+
+    broadcast_html = message.html_text or html_escape(text_raw)
+
+    pending_admin_broadcast[admin_id] = "custom"
+    pending_admin_broadcast_text[admin_id] = broadcast_html
+    pending_admin_broadcast_source[admin_id] = "panel"
+    users_cnt = len(store.data.get("users", []))
+    await message.answer(
+        "📣 <b>Подтверждение рассылки</b>\n\n"
+        "Тип: <b>Своя рассылка</b>\n"
+        "Форматирование: сохранено ✅\n"
+        f"Получателей: <b>{users_cnt}</b>\n\n"
+        "Так и отправить?",
+        parse_mode="HTML",
+        reply_markup=admin_broadcast_confirm_kb("custom"),
+    )
+
+
 @dp.message(Command("broadcast"))
 async def broadcast_cmd(message: Message):
     admin_id = message.from_user.id
@@ -538,7 +592,8 @@ async def admindel_cmd(message: Message):
         await message.answer("❌ Нельзя удалить суперадмина (прописан в config).", parse_mode="HTML")
         return
 
-    target_label = store.get_user_label(uid)
+    target_label = await resolve_user_label(message.bot, uid)
+    store.set_user_label(uid, target_label)
     removed = store.del_extra_admin(uid)
     log_admin(admin_id, "admindel", f"target={uid} success={removed}")
 

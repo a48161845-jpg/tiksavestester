@@ -2,9 +2,10 @@
 Обработка callback-кнопок админ-панели (callback_data, начинающийся на "ad:").
 """
 import contextlib
+import time
 
 from aiogram import F
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
 from globals_state import dp
 from helpers import is_admin, parse_stats_mode
@@ -32,6 +33,7 @@ from broadcast import (
     pending_admin_broadcast_text,
     pending_admin_broadcast_source,
     pending_admin_broadcast_cancel,
+    waiting_custom_broadcast,
 )
 
 
@@ -188,11 +190,35 @@ async def admin_cb(call: CallbackQuery):
         await call.answer()
         return
 
+    if cmd == "customtext":
+        waiting_custom_broadcast[uid] = time.time()
+        pending_admin_broadcast.pop(uid, None)
+        pending_admin_broadcast_text.pop(uid, None)
+        pending_admin_broadcast_source[uid] = "panel"
+        if not call.message:
+            await call.answer("Ошибка: сообщение недоступно.", show_alert=True)
+            return
+        with contextlib.suppress(Exception):
+            await call.message.edit_text(
+                "✍️ <b>Своя рассылка</b>\n\n"
+                "Пришли следующим сообщением текст рассылки — форматирование "
+                "(жирный/курсив/моно/зачёркнутый/ссылки), которое ты применишь "
+                "через выделение текста в Telegram, сохранится как есть.\n\n"
+                "У тебя 5 минут, иначе режим ожидания сбросится.",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="ad:cancel")]]
+                ),
+            )
+        await call.answer()
+        return
+
     if cmd == "cancel":
         pending_admin_broadcast.pop(uid, None)
         pending_admin_broadcast_text.pop(uid, None)
         pending_admin_broadcast_source.pop(uid, None)
         pending_admin_broadcast_cancel.pop(uid, None)
+        waiting_custom_broadcast.pop(uid, None)
         if call.message:
             with contextlib.suppress(Exception):
                 await call.message.delete()
@@ -222,6 +248,7 @@ async def admin_cb(call: CallbackQuery):
             pending_admin_broadcast.pop(uid, None)
             pending_admin_broadcast_text.pop(uid, None)
             pending_admin_broadcast_source.pop(uid, None)
+            waiting_custom_broadcast.pop(uid, None)
             if call.message:
                 with contextlib.suppress(Exception):
                     await call.message.edit_text(ADMIN_MENU_TEXT, parse_mode="HTML", reply_markup=admin_menu_kb())

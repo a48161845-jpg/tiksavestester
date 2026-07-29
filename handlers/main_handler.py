@@ -30,7 +30,6 @@ from helpers import (
     exc_type_name,
     extract_tiktok_url,
     normalize_tiktok_url,
-    resolve_tiktok_redirect,
 )
 from storage import store
 from user_label import resolve_user_label
@@ -104,21 +103,7 @@ async def main_handler(message: Message, client: TikWMClient, switcher: Provider
         async with download_sem:
             with contextlib.suppress(Exception):
                 await status.edit_text("⏳ Скачиваю…")
-            provider = switcher.choose()
-            try:
-                media = await provider.get_media(url or text)
-            except Exception:
-                # retry with resolved redirect for short links
-                sess = getattr(provider, "session", None)
-                if sess and url:
-                    resolved = await resolve_tiktok_redirect(sess, url)
-                    resolved = normalize_tiktok_url(resolved)
-                    if resolved and resolved != url:
-                        media = await provider.get_media(resolved)
-                    else:
-                        raise
-                else:
-                    raise
+            media, provider = await switcher.get_media(url or text, raw_url=url)
 
             video, photos, music = media.video, media.photos, media.music
             description = media.description
