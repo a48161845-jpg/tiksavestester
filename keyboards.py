@@ -7,7 +7,7 @@ from typing import List
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-from config import SUPPORT_USERNAME, CRYPTO_DONATE_URL, BOT_SHARE_URL, STARS_MIN, STARS_MAX
+from config import SUPPORT_USERNAME, CRYPTO_DONATE_URL, BOT_SHARE_URL, STARS_MIN, STARS_MAX, GIFTS
 from helpers import html_escape, code
 
 # ================== STATS / TOP KEYBOARDS ==================
@@ -57,7 +57,8 @@ START_TEXT = (
     "🧾 Помощь: /help\n"
     "💛 Поддержать бота: /donate\n"
     "🆘 Поддержка: /support\n"
-    "📊 Моя статистика: /me"
+    "📊 Моя статистика: /me\n"
+    "🎁 Реферальная система и подарки: /ref"
 )
 
 # ================== DONATE ==================
@@ -118,6 +119,7 @@ HELP_TEXT = (
     "• 🎵 Скачать музыку — скачивание звука/музыки\n"
     "• 💛 Донат — поддержка проекта\n"
     "• 🆘 Поддержка — связь с админом\n\n"
+    "🎁 Приглашай друзей и получай баллы на подарки: /ref\n\n"
     "⚠️ Лимиты:\n"
     "• Частые запросы ограничены кулдауном\n"
     "• Много фото за раз — лимит объёма"
@@ -335,5 +337,59 @@ def broadcast_cancel_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="⛔ Остановить рассылку", callback_data="ad:bcancel")],
+        ]
+    )
+
+
+# ================== REFERRAL / GIFT SHOP ==================
+def ref_menu_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🎁 Магазин подарков", callback_data="ref:shop")],
+            [InlineKeyboardButton(text="👥 Мои рефералы", callback_data="ref:myrefs")],
+            [InlineKeyboardButton(text="📦 Мои заявки", callback_data="ref:myrequests")],
+            [InlineKeyboardButton(text="🏆 Топ рефереров", callback_data="ref:top")],
+            [InlineKeyboardButton(text="📖 Как это работает", callback_data="ref:howitworks")],
+        ]
+    )
+
+
+def ref_back_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="ref:back")]])
+
+
+def gift_shop_kb(balance: int) -> InlineKeyboardMarkup:
+    rows: List[List[InlineKeyboardButton]] = []
+    row: List[InlineKeyboardButton] = []
+    for g in GIFTS:
+        lock = "" if balance >= g["price"] else "🔒 "
+        row.append(InlineKeyboardButton(text=f"{lock}{g['emoji']} {g['name']}", callback_data=f"gift:buy:{g['key']}"))
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="ref:back")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def gift_confirm_kb(key: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"gift:confirm:{key}"),
+                InlineKeyboardButton(text="❌ Отмена", callback_data="gift:cancel"),
+            ]
+        ]
+    )
+
+
+def gift_admin_kb(req_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Выдать", callback_data=f"admgift:ok:{req_id}"),
+                InlineKeyboardButton(text="❌ Отклонить", callback_data=f"admgift:no:{req_id}"),
+            ]
         ]
     )

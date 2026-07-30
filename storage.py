@@ -122,6 +122,13 @@ class Storage:
             },
             "user_stats": {"downloads": {}, "stars": {}},
             "user_stats_period": {"d": {}, "n": {}, "m": {}, "y": {}},
+            # ---- реферальная система ----
+            "referrals": {},       # uid_str -> referrer_id (int): кто кого пригласил
+            "referrals_log": [],   # [{"user_id":, "referrer_id":, "ts":}, ...] — история
+            "ref_stats": {},       # uid_str -> {"referrals_count": int, "ref_points": int}
+            # ---- магазин подарков ----
+            "gift_requests": {},   # req_id_str -> {"user_id","gift_key","gift_name","gift_price","status","created_at","updated_at"}
+            "gift_requests_seq": 0,
         }
 
     # ---------- async load ----------
@@ -441,6 +448,107 @@ class Storage:
         mp[category] = int(mp.get(category, 0)) + 1
         self._mark_dirty()
         return int(mp[category])
+
+    # ---------- referrals ----------
+    def get_referrer(self, uid: int) -> Optional[int]:
+        v = self.data.get("referrals", {}).get(str(uid))
+        return int(v) if v is not None else None
+
+    def set_referral(self, uid: int, referrer_id: int) -> bool:
+        """
+        Фиксирует, что uid пришёл по ссылке referrer_id.
+        Возвращает True, только если это реально новая, валидная запись:
+        сам на себя не считается, и повторно один и тот же реферал не засчитывается.
+        """
+        if uid == referrer_id:
+            return False
+        refs = self.data.setdefault("referrals", {})
+        if str(uid) in refs:
+            return False
+        refs[str(uid)] = int(referrer_id)
+        self.data.setdefault("referrals_log", []).append(
+            {"user_id": uid, "referrer_id": referrer_id, "ts": int(time.time())}
+        )
+        self._mark_dirty()
+        return True
+
+    def add_ref_points(self, referrer_id: int, points: int) -> Dict[str, int]:
+        """Начисляет баллы пригласившему и увеличивает счётчик рефералов."""
+        rs = self.data.setdefault("ref_stats", {})
+        rec = rs.setdefault(str(referrer_id), {"referrals_count": 0, "ref_points": 0})
+        rec["referrals_count"] = int(rec.get("referrals_count", 0)) + 1
+        rec["ref_points"] = int(rec.get("ref_points", 0)) + int(points)
+        self._mark_dirty()
+        return {"referrals_count": int(rec["referrals_count"]), "ref_points": int(rec["ref_points"])}
+
+    def get_ref_stats(self, uid: int) -> Dict[str, int]:
+        rec = self.data.get("ref_stats", {}).get(str(uid)) or {}
+        return {
+            "referrals_count": int(rec.get("referrals_count", 0)),
+            "ref_points": int(rec.get("ref_points", 0)),
+        }
+
+    def add_ref_points_delta(self, uid: int, delta: int) -> int:
+        """Списание/возврат баллов (при покупке подарка / отказе в выдаче)."""
+        rs = self.data.setdefault("ref_stats", {})
+        rec = rs.setdefault(str(uid), {"referrals_count": 0, "ref_points": 0})
+        rec["ref_points"] = int(rec.get("ref_points", 0)) + int(delta)
+        self._mark_dirty()
+        return int(rec["ref_points"])
+
+    def top_referrers(self, limit: int = 10) -> List[Tuple[int, int]]:
+        rs = self.data.get("ref_stats", {})
+        items = [(int(uid), int((rec or {}).get("referrals_count", 0))) for uid, rec in rs.items()]
+        items = [x for x in items if x[1] > 0]
+        items.sort(key=lambda x: x[1], reverse=True)
+        return items[:limit]
+
+    def ref_rank(self, uid: int) -> Optional[int]:
+        rs = self.data.get("ref_stats", {})
+        items = sorted(
+            ((int(u), int((r or {}).get("referrals_count", 0))) for u, r in rs.items()),
+            key=lambda x: x[1],
+            reverse=True,
+        )
+        for i, (u, cnt) in enumerate(items, start=1):
+            if u == uid:
+                return i if cnt > 0 else None
+        return None
+
+    # ---------- gift requests (магазин подарков) ----------
+    def new_gift_request(self, uid: int, gift_key: str, gift_name: str, gift_price: int) -> int:
+        gr = self.data.setdefault("gift_requests", {})
+        seq = int(self.data.get("gift_requests_seq", 0)) + 1
+        self.data["gift_requests_seq"] = seq
+        now_ts = int(time.time())
+        gr[str(seq)] = {
+            "user_id": int(uid),
+            "gift_key": gift_key,
+            "gift_name": gift_name,
+            "gift_price": int(gift_price),
+            "status": "pending",
+            "created_at": now_ts,
+            "updated_at": now_ts,
+        }
+        self._mark_dirty()
+        return seq
+
+    def get_gift_request(self, req_id: int) -> Optional[Dict[str, Any]]:
+        rec = self.data.get("gift_requests", {}).get(str(req_id))
+        return dict(rec) if rec else None
+
+    def set_gift_request_status(self, req_id: int, status: str) -> None:
+        gr = self.data.get("gift_requests", {}).get(str(req_id))
+        if gr is not None:
+            gr["status"] = status
+            gr["updated_at"] = int(time.time())
+            self._mark_dirty()
+
+    def user_gift_requests(self, uid: int, limit: int = 20) -> List[Dict[str, Any]]:
+        gr = self.data.get("gift_requests", {})
+        items = [dict(v, id=int(k)) for k, v in gr.items() if int(v.get("user_id", -1)) == int(uid)]
+        items.sort(key=lambda x: x.get("created_at", 0), reverse=True)
+        return items[:limit]
 
     # ---- совместимость: убраны strikes, оставлены заглушки ----
     def strikes_count(self, uid: int, kind: str = "spam") -> int:

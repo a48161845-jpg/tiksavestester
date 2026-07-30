@@ -130,5 +130,26 @@ MSG_SPAM = "🛡 Флуд. Подожди ~{n} сек."
 MSG_DL = "⏳ Лимит скачиваний. Подожди ~{n} сек."
 MSG_PHOTO = "📸 Лимит фото. Подожди ~{n} сек."
 
+# ========= РЕФЕРАЛЬНАЯ СИСТЕМА / МАГАЗИН ПОДАРКОВ =========
+BOT_USERNAME = os.getenv("BOT_USERNAME", "tiksavesbot").strip().lstrip("@")
+REF_POINTS_PER_REFERRAL = int(os.getenv("REF_POINTS_PER_REFERRAL", "10"))
+REF_TOP_LIMIT = int(os.getenv("REF_TOP_LIMIT", "10"))
+
+# Каталог подарков: ключ, эмодзи, название, цена в баллах.
+# Выдаются вручную администрацией — тут только учёт заявок/баланса.
+GIFTS = [
+    {"key": "heart",     "emoji": "❤️", "name": "Сердечко",   "price": 100},
+    {"key": "bear",      "emoji": "🧸", "name": "Мишка",      "price": 100},
+    {"key": "rose",      "emoji": "🌹", "name": "Роза",       "price": 200},
+    {"key": "giftbox",   "emoji": "🎁", "name": "Подарок",    "price": 200},
+    {"key": "champagne", "emoji": "🥂", "name": "Шампанское", "price": 500},
+    {"key": "cake",      "emoji": "🍰", "name": "Тортик",     "price": 500},
+    {"key": "rocket",    "emoji": "🚀", "name": "Ракета",     "price": 500},
+    {"key": "diamond",   "emoji": "💎", "name": "Алмаз",      "price": 1000},
+    {"key": "ring",      "emoji": "💍", "name": "Кольцо",     "price": 1000},
+    {"key": "trophy",    "emoji": "🏆", "name": "Кубок",      "price": 1000},
+]
+GIFTS_BY_KEY = {g["key"]: g for g in GIFTS}
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
 log = logging.getLogger("tiktok_bot")
