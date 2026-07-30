@@ -1,22 +1,39 @@
 """
 Состояние "ожидающих выбора" сущностей между шагами диалога:
-- pending: фото-пикер (выбор конкретных фото из слайдшоу);
+- pending: фото-пикер (выбор конкретных фото из слайдшоу, музыка/описание —
+  тоже переключатели-галочки, скачиваются вместе с фото по кнопке "Продолжить"/
+  "Скачать всё", а не сразу по тапу);
 - pending_video: задел на выбор перед скачиванием видео (см. video choice callbacks);
-- last_audio_url / last_video_src: последние известные ссылки на музыку/видео
-  пользователя — нужны для кнопки "Музыка" под уже отправленным видео.
+- video_extras: музыка/описание/источник для кнопок под конкретным отправленным
+  видео-сообщением. Ключ — уникальный req_id (не uid!), потому что бот теперь
+  может обрабатывать несколько скачиваний одного пользователя параллельно —
+  если бы это хранилось по uid, второе скачивание могло перезаписать данные
+  первого, и кнопка под старым видео присылала бы музыку/описание от нового.
 """
 import time
-from typing import Dict, Any, List
+import uuid
+from typing import Dict, Any, List, Optional
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from config import PENDING_TTL_SEC, PAGE_SIZE
 
 pending: Dict[int, Dict[str, Any]] = {}
-last_audio_url: Dict[int, str] = {}
-last_video_src: Dict[int, str] = {}
-last_description: Dict[int, str] = {}
 pending_video: Dict[int, Dict[str, Any]] = {}
+
+video_extras: Dict[str, Dict[str, Any]] = {}
+VIDEO_EXTRAS_TTL_SEC = 1800  # 30 минут на то, чтобы нажать "Музыка"/"Описание" под видео
+
+
+def new_req_id() -> str:
+    return uuid.uuid4().hex[:12]
+
+
+def cleanup_video_extras() -> None:
+    now = time.time()
+    dead = [k for k, v in video_extras.items() if now - float(v.get("ts", 0)) > VIDEO_EXTRAS_TTL_SEC]
+    for k in dead:
+        video_extras.pop(k, None)
 
 
 def cleanup_pending() -> None:
@@ -62,10 +79,19 @@ def picker_kb(uid: int) -> InlineKeyboardMarkup:
 
     rows.append([InlineKeyboardButton(text="✅ Выбрать страницу", callback_data="pk:selpage")])
     rows.append([InlineKeyboardButton(text="🔽 Скачать всё", callback_data="pk:sendall")])
-    row2: List[InlineKeyboardButton] = [InlineKeyboardButton(text="🎵 Скачать музыку", callback_data="pk:music")]
+
+    # Музыка/описание — тоже галочки (переключатели), а не мгновенная отправка:
+    # выбираешь, что нужно, и жмёшь "Продолжить"/"Скачать всё" — всё уходит вместе.
+    row2: List[InlineKeyboardButton] = []
+    if st.get("music"):
+        checked = "✅ " if st.get("want_music") else ""
+        row2.append(InlineKeyboardButton(text=f"{checked}🎵 Музыка", callback_data="pk:togmusic"))
     if st.get("description"):
-        row2.append(InlineKeyboardButton(text="📝 Описание", callback_data="pk:desc"))
-    rows.append(row2)
+        checked = "✅ " if st.get("want_description") else ""
+        row2.append(InlineKeyboardButton(text=f"{checked}📝 Описание", callback_data="pk:togdesc"))
+    if row2:
+        rows.append(row2)
+
     rows.append([InlineKeyboardButton(text="🧹 Очистить", callback_data="pk:clr")])
 
     if pages > 1:

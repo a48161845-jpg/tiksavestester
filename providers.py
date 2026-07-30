@@ -3,6 +3,7 @@
 и резервный (Apify, опционально), а также логика переключения между ними.
 """
 import json
+import re
 import time
 import asyncio
 import contextlib
@@ -107,6 +108,25 @@ def _deep_find_list(data: Any, keys: List[str], _depth: int = 0) -> List[str]:
     return []
 
 
+_TAG_GLUE_RE = re.compile(r"(?<=\S)(?=[#@])")
+_MULTI_SPACE_RE = re.compile(r"[ \t]{2,}")
+
+
+def _normalize_description(text: Optional[str]) -> Optional[str]:
+    """
+    API-скрейперы (tikwm и подобные) иногда отдают описание видео с хэштегами,
+    склеенными друг с другом и с текстом без пробелов — "текст#тег1#тег2"
+    вместо "текст #тег1 #тег2", как это выглядит в самом TikTok. Расклеиваем:
+    вставляем пробел перед каждым "#"/"@", если перед ним нет пробела, и
+    схлопываем случайные повторные пробелы (переносы строк не трогаем).
+    """
+    if not text:
+        return text
+    t = _TAG_GLUE_RE.sub(" ", text)
+    t = _MULTI_SPACE_RE.sub(" ", t)
+    return t.strip()
+
+
 class BaseProvider:
     name = "base"
     async def get_media(self, url: str) -> MediaInfo:
@@ -193,7 +213,7 @@ class TikWMClient(_DlErrMixin, BaseProvider):
         for k in ("title", "desc", "description"):
             v = data.get(k)
             if isinstance(v, str) and v.strip():
-                description = v.strip()
+                description = _normalize_description(v.strip())
                 break
 
         return MediaInfo(video=video, photos=photos, music=music, description=description)
@@ -328,7 +348,7 @@ class TiklyDownProvider(_DlErrMixin, BaseProvider):
                 video = _deep_find_url(js, ["nowm", "no_watermark", "noWatermark", "play", "hdplay", "video_url", "videoUrl", "download_url", "downloadUrl"])
                 photos = _deep_find_list(js, ["images", "image", "photos", "slides", "imagePost"])
                 music = _deep_find_url(js, ["music", "music_url", "musicUrl", "audio", "audio_url", "audioUrl", "mp3"])
-                description = _deep_find_str(js, ["title", "desc", "description", "caption"])
+                description = _normalize_description(_deep_find_str(js, ["title", "desc", "description", "caption"]))
 
                 if not video and not photos:
                     raise RuntimeError(f"TiklyDown: no video/photo links in response (keys: {list(js.keys()) if isinstance(js, dict) else type(js)})")
@@ -403,7 +423,7 @@ class ApifyProvider(_DlErrMixin, BaseProvider):
             video = _deep_find_url(item, ["downloadAddr", "play", "video_url", "videoUrl", "noWatermark", "hdplay"])
             photos = _deep_find_list(item, ["images", "imagePost", "photos", "slides"])
             music = _deep_find_url(item, ["musicMeta", "music", "music_url", "musicUrl", "playUrl"])
-            description = _deep_find_str(item, ["text", "title", "desc", "description"])
+            description = _normalize_description(_deep_find_str(item, ["text", "title", "desc", "description"]))
 
             if not video and not photos:
                 raise RuntimeError(f"Apify: no video/photo links in dataset item (keys: {list(item.keys()) if isinstance(item, dict) else type(item)})")

@@ -20,7 +20,7 @@ from globals_state import dp
 from providers import TikWMClient, TiklyDownProvider, ApifyProvider, BaseProvider, ProviderSwitcher
 from logging_channel import autosave_loop, start_log_worker, stop_log_worker, send_channel_log
 from broadcast import broadcast_schedule_loop
-from db_report import start_monthly_report, stop_monthly_report, start_daily_summary, stop_daily_summary
+from db_report import start_monthly_report, stop_monthly_report, start_pinned_overview, stop_pinned_overview
 
 # Импорт регистрирует все хендлеры (@dp.message/@dp.callback_query) на dp.
 import handlers  # noqa: F401
@@ -28,11 +28,11 @@ import handlers  # noqa: F401
 _autosave_task: Optional[asyncio.Task] = None
 _broadcast_task: Optional[asyncio.Task] = None
 _monthly_task: Optional[asyncio.Task] = None
-_daily_summary_task: Optional[asyncio.Task] = None
+_pinned_overview_task: Optional[asyncio.Task] = None
 
 
 async def main():
-    global _autosave_task, _broadcast_task, _monthly_task, _daily_summary_task
+    global _autosave_task, _broadcast_task, _monthly_task, _pinned_overview_task
 
     # 1) Инициализируем БД (создаём таблицы, мигрируем из JSON если нужно)
     await init_db()
@@ -66,7 +66,7 @@ async def main():
         _autosave_task = asyncio.create_task(autosave_loop())
         _broadcast_task = asyncio.create_task(broadcast_schedule_loop(bot))
         _monthly_task = start_monthly_report(bot)
-        _daily_summary_task = start_daily_summary(bot)
+        _pinned_overview_task = start_pinned_overview(bot)
 
         start_ts = time.time()
         shutdown_reason = "⏹️ Штатная остановка"
@@ -95,7 +95,7 @@ async def main():
             shutdown_reason = f"💥 Аварийная остановка: <b>{e.__class__.__name__}</b> — {html_escape(str(e)[:200])}"
             raise
         finally:
-            for task in (_autosave_task, _broadcast_task, _monthly_task, _daily_summary_task):
+            for task in (_autosave_task, _broadcast_task, _monthly_task, _pinned_overview_task):
                 if task and not task.done():
                     task.cancel()
                     with contextlib.suppress(Exception):

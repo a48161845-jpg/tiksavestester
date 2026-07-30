@@ -3,6 +3,7 @@
 По команде /dbfile (только для админов) и автоматически раз в месяц — файлом.
 """
 import asyncio
+import contextlib
 import io
 import json
 from datetime import datetime, timedelta
@@ -11,7 +12,7 @@ from typing import Optional
 from aiogram import Bot
 from aiogram.types import BufferedInputFile
 
-from config import LOG_CHANNEL_ID, MSK_TZ, log
+from config import LOG_CHANNEL_ID, MSK_TZ, ADMINS, log
 from helpers import msk_now, now_msk_str
 from storage import store
 from logging_channel import send_channel_log
@@ -175,44 +176,89 @@ def stop_monthly_report() -> None:
         _monthly_task.cancel()
 
 
-# =================== DAILY SUMMARY (лог-канал) ===================
-# Одно короткое сообщение в конце дня вместо потока мелких событий за весь день.
-_daily_task: asyncio.Task | None = None
-DAILY_SUMMARY_HOUR = 23
-DAILY_SUMMARY_MINUTE = 55
+# =================== PINNED OVERVIEW (лог-канал) ===================
+# Вместо ежедневной сводки в 23:55 — одно закреплённое сообщение с общей
+# статистикой за всё время, которое периодически обновляется (редактируется),
+# а не плодит новые сообщения каждый день.
+_pinned_stats_task: Optional[asyncio.Task] = None
+PINNED_STATS_INTERVAL_SEC = 900  # обновление раз в 15 минут
 
 
-async def daily_summary_loop(bot: Bot) -> None:
-    """Раз в сутки, в DAILY_SUMMARY_HOUR:DAILY_SUMMARY_MINUTE МСК, шлёт короткую сводку дня в лог-канал."""
-    from stats import daily_summary_text  # локальный импорт — избегаем цикла db_report <-> stats
+def _pinned_overview_text() -> str:
+    d = store.data
+    users_total = len(d.get("users", []))
+    bans_active = len([b for b in d.get("bans", {}).values() if isinstance(b, dict)])
+    bans_total_hist = len(d.get("bans", {}))
+    admins_total = len(ADMINS) + len(store.get_extra_admins())
 
+    all_stats = (d.get("stats") or {}).get("all", {})
+    dls = all_stats.get("downloads", {}) or {}
+    video_ops = dls.get("video_ops", 0)
+    photo_ops = dls.get("photo_ops", 0)
+    photos_sent = dls.get("photos_sent", 0)
+    audio_sent = dls.get("audio_sent", 0)
+    stars_total = all_stats.get("stars_total", 0)
+    errors_total = (all_stats.get("errors") or {}).get("total", 0)
+    bans_total = all_stats.get("bans_total", bans_total_hist)
+
+    return (
+        "📌 <b>Общая статистика TikSaves</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"👥 Пользователей: <b>{users_total}</b>\n"
+        f"👑 Администраторов: <b>{admins_total}</b>\n"
+        f"🚫 Активных банов: <b>{bans_active}</b> (всего за всё время: {bans_total})\n\n"
+        f"🎬 Видео скачано: <b>{video_ops}</b>\n"
+        f"🖼️ Фото-сессий: <b>{photo_ops}</b> (фото отправлено: {photos_sent})\n"
+        f"🎵 Музыки отправлено: <b>{audio_sent}</b>\n"
+        f"⭐ Stars получено: <b>{stars_total}</b>\n"
+        f"❌ Ошибок всего: <b>{errors_total}</b>\n\n"
+        f"🕒 Обновлено: {now_msk_str()}"
+    )
+
+
+async def _update_pinned_overview(bot: Bot) -> None:
+    text = _pinned_overview_text()
+    info = store.data.get("pinned_stats") or {}
+    msg_id = info.get("message_id")
+    chat_id = info.get("chat_id") or LOG_CHANNEL_ID
+
+    if msg_id:
+        try:
+            await bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=text, parse_mode="HTML")
+            return
+        except Exception as e:
+            log.info("pinned_overview: не смог отредактировать (%s) — пересоздаю сообщение", e)
+
+    try:
+        msg = await bot.send_message(chat_id=LOG_CHANNEL_ID, text=text, parse_mode="HTML")
+        store.data["pinned_stats"] = {"chat_id": msg.chat.id, "message_id": msg.message_id}
+        store._mark_dirty()
+        with contextlib.suppress(Exception):
+            await bot.pin_chat_message(chat_id=msg.chat.id, message_id=msg.message_id, disable_notification=True)
+    except Exception as e:
+        log.error("pinned_overview: не удалось создать/закрепить сообщение: %s", e)
+
+
+async def pinned_overview_loop(bot: Bot) -> None:
+    """Обновляет закреплённую общую статистику в лог-канале раз в PINNED_STATS_INTERVAL_SEC."""
     while True:
         try:
-            now = msk_now()
-            target = now.replace(hour=DAILY_SUMMARY_HOUR, minute=DAILY_SUMMARY_MINUTE, second=0, microsecond=0)
-            if target <= now:
-                target += timedelta(days=1)
-
-            wait = (target - now).total_seconds()
-            log.info("daily_summary: следующая сводка через %.0f сек (%s МСК)", wait, target.strftime("%Y-%m-%d %H:%M"))
-            await asyncio.sleep(max(60, wait))
-
-            await send_channel_log(bot, daily_summary_text() + "\n#daily_summary")
-
+            await _update_pinned_overview(bot)
+            await asyncio.sleep(PINNED_STATS_INTERVAL_SEC)
         except asyncio.CancelledError:
             break
         except Exception as e:
-            log.error("daily_summary_loop: %s", e)
-            await asyncio.sleep(3600)
+            log.error("pinned_overview_loop: %s", e)
+            await asyncio.sleep(300)
 
 
-def start_daily_summary(bot: Bot) -> asyncio.Task:
-    global _daily_task
-    _daily_task = asyncio.create_task(daily_summary_loop(bot))
-    return _daily_task
+def start_pinned_overview(bot: Bot) -> asyncio.Task:
+    global _pinned_stats_task
+    _pinned_stats_task = asyncio.create_task(pinned_overview_loop(bot))
+    return _pinned_stats_task
 
 
-def stop_daily_summary() -> None:
-    global _daily_task
-    if _daily_task and not _daily_task.done():
-        _daily_task.cancel()
+def stop_pinned_overview() -> None:
+    global _pinned_stats_task
+    if _pinned_stats_task and not _pinned_stats_task.done():
+        _pinned_stats_task.cancel()

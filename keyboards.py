@@ -57,7 +57,7 @@ START_TEXT = (
     "🧾 Помощь: /help\n"
     "💛 Поддержать бота: /donate\n"
     "🆘 Поддержка: /support\n"
-    "📊 Моя статистика: /stats"
+    "📊 Моя статистика: /me"
 )
 
 # ================== DONATE ==================
@@ -206,13 +206,13 @@ def post_download_kb() -> InlineKeyboardMarkup:
         ]
     )
 
-def under_video_kb(has_music: bool = False, has_description: bool = False) -> InlineKeyboardMarkup:
+def under_video_kb(has_music: bool = False, has_description: bool = False, req_id: str = "") -> InlineKeyboardMarkup:
     """Кнопки под скачанным видео: Музыка (если есть), Описание (если есть), Донат, Поделиться."""
     top_row: List[InlineKeyboardButton] = []
     if has_music:
-        top_row.append(InlineKeyboardButton(text="🎵 Музыка", callback_data="dl:audio"))
+        top_row.append(InlineKeyboardButton(text="🎵 Музыка", callback_data=f"dl:audio:{req_id}"))
     if has_description:
-        top_row.append(InlineKeyboardButton(text="📝 Описание", callback_data="dl:desc"))
+        top_row.append(InlineKeyboardButton(text="📝 Описание", callback_data=f"dl:desc:{req_id}"))
 
     bottom_row: List[InlineKeyboardButton] = [
         InlineKeyboardButton(text="💛 Донат", callback_data="donate:open"),
@@ -248,9 +248,6 @@ def admin_menu_kb() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="📢 Реклама", callback_data="ad:advert"),
             ],
             [
-                InlineKeyboardButton(text="✍️ Своя рассылка", callback_data="ad:customtext"),
-            ],
-            [
                 InlineKeyboardButton(text="👑 Администраторы", callback_data="ad:adminlist"),
             ],
             [
@@ -279,7 +276,6 @@ ADMIN_MENU_TEXT = (
     "🗄 <b>Дамп БД</b> — скачать базу данных\n"
     "👑 <b>Администраторы</b> — список и управление\n"
     "📌 <b>Напоминание</b> / 📢 <b>Реклама</b> — рассылки\n"
-    "✍️ <b>Своя рассылка</b> — с сохранением форматирования (жирный/курсив/моно/ссылки)\n"
     "🧾 <b>Команды</b> — полный список\n"
 )
 
