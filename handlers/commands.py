@@ -1,17 +1,20 @@
 """
 Базовые пользовательские и общие команды бота.
 """
-from aiogram.filters import Command
+import contextlib
+
+from aiogram.filters import Command, CommandObject
 from aiogram.types import Message, LinkPreviewOptions
 
 from globals_state import dp
-from config import log
+from config import log, REF_POINTS_PER_REFERRAL
 from helpers import html_escape, is_admin, parse_stats_mode, parse_date_token
 from storage import store
 from user_label import resolve_user_label
 from gates import gate_message
 from logging_channel import log_event, log_admin_action_to_channel, format_user_for_log
 from admin_log_file import log_admin
+from referral import new_referral_notify_text
 from keyboards import (
     START_TEXT,
     HELP_TEXT,
@@ -34,7 +37,7 @@ from stats import (
 
 
 @dp.message(Command("start"))
-async def start_cmd(message: Message):
+async def start_cmd(message: Message, command: CommandObject):
     uid = message.from_user.id
     label = await resolve_user_label(message.bot, uid)
     store.set_user_label(uid, label)
@@ -49,6 +52,19 @@ async def start_cmd(message: Message):
                 f"👤 User/id: <b>{format_user_for_log(label, uid)}</b>",
             ],
         )
+
+        # ---- реферальная система: /start?start=REFERRER_ID ----
+        payload = (command.args or "").strip()
+        if payload.isdigit():
+            referrer_id = int(payload)
+            if store.set_referral(uid, referrer_id):
+                rs = store.add_ref_points(referrer_id, REF_POINTS_PER_REFERRAL)
+                with contextlib.suppress(Exception):
+                    await message.bot.send_message(
+                        referrer_id,
+                        new_referral_notify_text(label, rs),
+                        parse_mode="HTML",
+                    )
 
     if not await gate_message(message, label):
         return
