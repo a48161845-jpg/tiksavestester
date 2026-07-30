@@ -129,53 +129,18 @@ async def stats_cmd(message: Message):
     label = await resolve_user_label(message.bot, uid)
     store.set_user_label(uid, label)
 
+    if not is_admin(uid):
+        return
+    if not await gate_message(message, label):
+        return
+
     parts_all = (message.text or "").split()
     if len(parts_all) >= 3:
         d1 = parse_date_token(parts_all[1])
         d2 = parse_date_token(parts_all[2])
         if d1 and d2:
-            if not is_admin(uid):
-                if not await gate_message(message, label):
-                    return
-                await message.answer(_user_stats_range_text(uid, d1, d2), parse_mode="HTML")
-                await log_event(
-                    message.bot,
-                    "userstats",
-                    [
-                        "📊 Категория: <b>Статистика пользователя (диапазон)</b>",
-                        f"👤 User/id: <b>{format_user_for_log(label, uid)}</b>",
-                        f"🧾 Период: <b>{d1.strftime('%d.%m.%Y')} - {d2.strftime('%d.%m.%Y')}</b>",
-                    ],
-                )
-                return
-            if not await gate_message(message, label):
-                return
             await send_stats_range_message(message, uid, label, d1, d2)
             return
-
-    if not is_admin(uid):
-        if not await gate_message(message, label):
-            return
-        parts = (message.text or "").split(maxsplit=1)
-        mode = "all"
-        if len(parts) == 2:
-            mode = parse_stats_mode(parts[1])
-        if mode == "all":
-            await message.answer(_user_stats_text(uid), parse_mode="HTML")
-        else:
-            await message.answer(_user_stats_period_text(uid, mode), parse_mode="HTML")
-        await log_event(
-            message.bot,
-            "userstats",
-            [
-                "📊 Категория: <b>Статистика пользователя</b>",
-                f"👤 User/id: <b>{format_user_for_log(label, uid)}</b>",
-                f"🧾 Режим: <b>{html_escape(mode)}</b>",
-            ],
-        )
-        return
-    if not await gate_message(message, label):
-        return
 
     parts = (message.text or "").split(maxsplit=1)
     mode = "all"
@@ -183,6 +148,52 @@ async def stats_cmd(message: Message):
         mode = parse_stats_mode(parts[1])
 
     await send_stats_message(message, uid, label, mode)
+
+
+@dp.message(Command("me"))
+async def me_cmd(message: Message):
+    uid = message.from_user.id
+    label = await resolve_user_label(message.bot, uid)
+    store.set_user_label(uid, label)
+
+    parts_all = (message.text or "").split()
+    if len(parts_all) >= 3:
+        d1 = parse_date_token(parts_all[1])
+        d2 = parse_date_token(parts_all[2])
+        if d1 and d2:
+            if not await gate_message(message, label):
+                return
+            await message.answer(_user_stats_range_text(uid, d1, d2), parse_mode="HTML")
+            await log_event(
+                message.bot,
+                "userstats",
+                [
+                    "📊 Категория: <b>Статистика пользователя (диапазон)</b>",
+                    f"👤 User/id: <b>{format_user_for_log(label, uid)}</b>",
+                    f"🧾 Период: <b>{d1.strftime('%d.%m.%Y')} - {d2.strftime('%d.%m.%Y')}</b>",
+                ],
+            )
+            return
+
+    if not await gate_message(message, label):
+        return
+    parts = (message.text or "").split(maxsplit=1)
+    mode = "all"
+    if len(parts) == 2:
+        mode = parse_stats_mode(parts[1])
+    if mode == "all":
+        await message.answer(_user_stats_text(uid), parse_mode="HTML")
+    else:
+        await message.answer(_user_stats_period_text(uid, mode), parse_mode="HTML")
+    await log_event(
+        message.bot,
+        "userstats",
+        [
+            "📊 Категория: <b>Статистика пользователя</b>",
+            f"👤 User/id: <b>{format_user_for_log(label, uid)}</b>",
+            f"🧾 Режим: <b>{html_escape(mode)}</b>",
+        ],
+    )
 
 
 @dp.message(Command("top"))

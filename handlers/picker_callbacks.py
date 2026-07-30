@@ -111,6 +111,8 @@ async def picker_cb(call: CallbackQuery):
 
     if act == "clr":
         st["selected"].clear()
+        st["want_music"] = False
+        st["want_description"] = False
         await call.answer("🧹 Очищено")
         await call.message.edit_reply_markup(reply_markup=picker_kb(uid))
         return
@@ -127,32 +129,25 @@ async def picker_cb(call: CallbackQuery):
         await call.message.edit_reply_markup(reply_markup=picker_kb(uid))
         return
 
-    if act == "music":
-        if not await gate_download():
-            await call.answer()
-            return
-        pending.pop(uid, None)
-        with contextlib.suppress(Exception):
-            await call.message.delete()
-        await call.answer("Отправляю музыку…")
-        if globals_state.g_provider:
-            await send_music_if_any(call.message, globals_state.g_provider, st.get("music"), uid=uid, label=label, src=st.get("src"))
+    if act == "togmusic":
+        if st.get("music"):
+            st["want_music"] = not st.get("want_music", False)
+        await call.answer("🎵 Музыка добавлена" if st.get("want_music") else "🎵 Музыка убрана")
+        await call.message.edit_reply_markup(reply_markup=picker_kb(uid))
         return
 
-    if act == "desc":
-        if not await gate_download():
-            await call.answer()
-            return
-        pending.pop(uid, None)
-        with contextlib.suppress(Exception):
-            await call.message.delete()
-        await call.answer("Отправляю описание…")
-        await send_description_if_any(call.message, st.get("description"))
+    if act == "togdesc":
+        if st.get("description"):
+            st["want_description"] = not st.get("want_description", False)
+        await call.answer("📝 Описание добавлено" if st.get("want_description") else "📝 Описание убрано")
+        await call.message.edit_reply_markup(reply_markup=picker_kb(uid))
         return
 
     if act == "sendall":
         src = str(st.get("src", ""))
         photos_all = list(st["photos"])
+        want_music = bool(st.get("want_music") and st.get("music"))
+        want_desc = bool(st.get("want_description") and st.get("description"))
 
         if not await gate_download():
             await call.answer()
@@ -169,8 +164,10 @@ async def picker_cb(call: CallbackQuery):
         cnt = await send_photos(call.message, photos_all, caption_html=CAPTION_PHOTO)
         store.inc_download(uid, "photo", items=cnt)
 
-        if globals_state.g_provider:
-            await send_music_if_any(call.message, globals_state.g_provider, st.get("music"), uid=uid, label=label, src=st.get("src"))
+        if want_music and globals_state.g_provider:
+            await send_music_if_any(call.message, globals_state.g_provider, st.get("music"), uid=uid, label=label, src=src)
+        if want_desc:
+            await send_description_if_any(call.message, st.get("description"))
 
         await log_event(
             call.bot,
@@ -188,8 +185,10 @@ async def picker_cb(call: CallbackQuery):
 
     if act == "go":
         sel: set[int] = st["selected"]
-        if not sel:
-            await call.answer("Выбери хотя бы одно фото.", show_alert=True)
+        want_music = bool(st.get("want_music") and st.get("music"))
+        want_desc = bool(st.get("want_description") and st.get("description"))
+        if not sel and not want_music and not want_desc:
+            await call.answer("Выбери хотя бы одно фото (или галочку музыки/описания).", show_alert=True)
             return
 
         src = str(st.get("src", ""))
@@ -198,7 +197,7 @@ async def picker_cb(call: CallbackQuery):
         if not await gate_download():
             await call.answer()
             return
-        if not await gate_photo_volume(len(chosen), src):
+        if chosen and not await gate_photo_volume(len(chosen), src):
             await call.answer()
             return
 
@@ -207,22 +206,27 @@ async def picker_cb(call: CallbackQuery):
             await call.message.delete()
 
         await call.answer("Отправляю…")
-        cnt = await send_photos(call.message, chosen, caption_html=CAPTION_PHOTO)
-        store.inc_download(uid, "photo", items=cnt)
+        cnt = 0
+        if chosen:
+            cnt = await send_photos(call.message, chosen, caption_html=CAPTION_PHOTO)
+            store.inc_download(uid, "photo", items=cnt)
 
-        if globals_state.g_provider:
-            await send_music_if_any(call.message, globals_state.g_provider, st.get("music"), uid=uid, label=label, src=st.get("src"))
+        if want_music and globals_state.g_provider:
+            await send_music_if_any(call.message, globals_state.g_provider, st.get("music"), uid=uid, label=label, src=src)
+        if want_desc:
+            await send_description_if_any(call.message, st.get("description"))
 
-        await log_event(
-            call.bot,
-            "photodl",
-            [
-                "🖼️ Категория: <b>Скачивание фото (выбор)</b>",
-                f"👤 User/id: <b>{format_user_for_log(label, uid)}</b>",
-                f"🔗 Ссылка: {code(src)}",
-                f"📦 Кол-во фото: <b>{cnt}</b>",
-            ],
-        )
+        if cnt:
+            await log_event(
+                call.bot,
+                "photodl",
+                [
+                    "🖼️ Категория: <b>Скачивание фото (выбор)</b>",
+                    f"👤 User/id: <b>{format_user_for_log(label, uid)}</b>",
+                    f"🔗 Ссылка: {code(src)}",
+                    f"📦 Кол-во фото: <b>{cnt}</b>",
+                ],
+            )
         chat_id = call.message.chat.id if call.message else uid
         await call.bot.send_message(chat_id, "👇", reply_markup=post_download_kb())
         return

@@ -19,7 +19,7 @@ from user_label import resolve_user_label
 from gates import gate_callback, gate_message
 from logging_channel import log_event, format_user_for_log
 from send_helpers import send_music_if_any, send_description_if_any
-from picker_state import last_audio_url, last_video_src, last_description
+from picker_state import video_extras
 from keyboards import (
     DONATE_TEXT,
     STARS_MENU_TEXT,
@@ -40,30 +40,44 @@ async def dl_cb(call: CallbackQuery):
     if not await gate_callback(call, label):
         return
 
-    action = (call.data or "").split(":", 1)[-1]
+    parts = (call.data or "").split(":")
+    action = parts[1] if len(parts) > 1 else ""
+    req_id = parts[2] if len(parts) > 2 else ""
+    extra = video_extras.get(req_id)
+
     if action == "audio":
-        url = last_audio_url.pop(uid, None)
+        url = extra.get("music") if extra else None
         if not url:
             await call.answer("Нет звука для этого видео.", show_alert=True)
             return
+        extra["music"] = None
         await call.answer("Отправляю звук…")
-        await send_music_if_any(call.message, globals_state.g_provider, url, uid=uid, label=label, src=last_video_src.get(uid))
+        await send_music_if_any(call.message, globals_state.g_provider, url, uid=uid, label=label, src=extra.get("src"))
         with contextlib.suppress(Exception):
             if call.message:
-                await call.message.edit_reply_markup(reply_markup=under_video_kb(has_music=False, has_description=uid in last_description))
+                await call.message.edit_reply_markup(
+                    reply_markup=under_video_kb(has_music=False, has_description=bool(extra.get("description")), req_id=req_id)
+                )
+        if not extra.get("music") and not extra.get("description"):
+            video_extras.pop(req_id, None)
         return
 
     if action == "desc":
-        desc = last_description.pop(uid, None)
+        desc = extra.get("description") if extra else None
         if not desc:
             await call.answer("Нет описания для этого видео.", show_alert=True)
             return
+        extra["description"] = None
         await call.answer("Отправляю описание…")
         if call.message:
             await send_description_if_any(call.message, desc)
         with contextlib.suppress(Exception):
             if call.message:
-                await call.message.edit_reply_markup(reply_markup=under_video_kb(has_music=uid in last_audio_url, has_description=False))
+                await call.message.edit_reply_markup(
+                    reply_markup=under_video_kb(has_music=bool(extra.get("music")), has_description=False, req_id=req_id)
+                )
+        if not extra.get("music") and not extra.get("description"):
+            video_extras.pop(req_id, None)
         return
 
     await call.answer()

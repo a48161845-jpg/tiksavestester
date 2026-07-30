@@ -39,7 +39,7 @@ from logging_channel import log_event, format_user_for_log
 from strikes import add_download_strike
 from providers import TikWMClient, ProviderSwitcher
 from send_helpers import send_video_smart
-from picker_state import pending, cleanup_pending, last_audio_url, last_video_src, last_description, picker_kb
+from picker_state import pending, cleanup_pending, video_extras, new_req_id, cleanup_video_extras, picker_kb
 from keyboards import under_video_kb
 from donate import waiting_stars_amount, send_stars_invoice
 
@@ -77,7 +77,6 @@ async def main_handler(message: Message, client: TikWMClient, switcher: Provider
     url = extract_tiktok_url(text)
     if url:
         url = normalize_tiktok_url(url)
-        last_video_src[uid] = url
     if not url and not text.startswith("/"):
         await message.answer("📎 Пришли ссылку на TikTok.")
         return
@@ -107,10 +106,16 @@ async def main_handler(message: Message, client: TikWMClient, switcher: Provider
 
             video, photos, music = media.video, media.photos, media.music
             description = media.description
-            if music:
-                last_audio_url[uid] = music
-            if description:
-                last_description[uid] = description
+            req_id = new_req_id()
+            cleanup_video_extras()
+            if music or description:
+                video_extras[req_id] = {
+                    "music": music,
+                    "description": description,
+                    "src": url or text,
+                    "uid": uid,
+                    "ts": time.time(),
+                }
 
             if photos:
                 await message.answer(PHOTO_WARNING_TEXT, parse_mode="HTML", link_preview_options=LinkPreviewOptions(is_disabled=True))
@@ -120,6 +125,8 @@ async def main_handler(message: Message, client: TikWMClient, switcher: Provider
                     "photos": photos,
                     "music": music,
                     "description": description,
+                    "want_music": False,
+                    "want_description": False,
                     "selected": set(),
                     "page": 0,
                     "ts": time.time(),
@@ -139,7 +146,7 @@ async def main_handler(message: Message, client: TikWMClient, switcher: Provider
                 video,
                 CAPTION_VIDEO,
                 status_msg=status,
-                reply_markup=under_video_kb(has_music=bool(music), has_description=bool(description)),
+                reply_markup=under_video_kb(has_music=bool(music), has_description=bool(description), req_id=req_id),
             )
             store.inc_download(uid, "video", items=1)
             with contextlib.suppress(Exception):

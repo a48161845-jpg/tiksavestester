@@ -5,6 +5,7 @@ Callback-обработчик выбора перед скачиванием в�
 и эти кнопки не появляются у пользователя. Код сохранён как есть на случай,
 если экран выбора будет включён повторно.
 """
+import time
 import contextlib
 
 from aiogram import F
@@ -19,7 +20,7 @@ from user_label import resolve_user_label
 from gates import gate_callback
 from logging_channel import log_event, format_user_for_log
 from send_helpers import send_video_smart, send_music_if_any
-from picker_state import pending_video, cleanup_pending_video, last_audio_url
+from picker_state import pending_video, cleanup_pending_video, video_extras, new_req_id
 from keyboards import under_video_kb
 
 
@@ -68,14 +69,21 @@ async def video_choice_cb(call: CallbackQuery):
         await call.answer("Отправляю видео…")
         if globals_state.g_provider:
             has_music = bool(st.get("music"))
+            req_id = new_req_id()
             if has_music:
-                last_audio_url[uid] = st.get("music", "")
+                video_extras[req_id] = {
+                    "music": st.get("music"),
+                    "description": None,
+                    "src": st.get("src"),
+                    "uid": uid,
+                    "ts": time.time(),
+                }
             await send_video_smart(
                 call.message,
                 globals_state.g_provider,
                 st.get("video"),
                 CAPTION_VIDEO,
-                reply_markup=under_video_kb(has_music=has_music),
+                reply_markup=under_video_kb(has_music=has_music, req_id=req_id),
             )
             store.inc_download(uid, "video", items=1)
             await log_event(
