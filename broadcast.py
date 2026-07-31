@@ -44,7 +44,7 @@ ADVERTISEMENT_MSG = (
 
 
 async def do_broadcast(message: Message, admin_id: int, admin_label: str, raw_text: str, *, already_html: bool = False) -> None:
-    users = list(store.data.get("users", []))
+    users = store.get_all_user_ids()
     if not users:
         await message.answer("Пока нет пользователей для рассылки.", parse_mode="HTML")
         return
@@ -113,7 +113,7 @@ async def do_broadcast(message: Message, admin_id: int, admin_label: str, raw_te
 
 
 async def do_broadcast_system(bot: Bot, kind: str, raw_text: str) -> None:
-    users = list(store.data.get("users", []))
+    users = store.get_all_user_ids()
     if not users:
         await log_event(
             bot,

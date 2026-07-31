@@ -204,6 +204,19 @@ class Storage:
     async def save_unthrottled(self) -> None:
         await self._flush()
 
+    def get_users_count(self) -> int:
+        """
+        Актуальное количество пользователей ПРЯМО СЕЙЧАС — из живого набора
+        в памяти, а не из data["users"], который синхронизируется с ним только
+        во время сохранения (раз в AUTO_SAVE_INTERVAL_SEC). Использовать это,
+        а не len(store.data.get("users", [])), везде где важна точность.
+        """
+        return len(self._users_set)
+
+    def get_all_user_ids(self) -> List[int]:
+        """Актуальный список всех зарегистрированных uid (см. get_users_count)."""
+        return sorted(self._users_set)
+
     # ---------- users ----------
     def set_user_label(self, uid: int, label: str) -> None:
         self.data.setdefault("users_map", {})

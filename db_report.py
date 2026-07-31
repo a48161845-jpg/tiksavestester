@@ -21,9 +21,8 @@ from logging_channel import send_channel_log
 def _build_report_text(title: str) -> str:
     """Формирует текст отчёта по текущим данным из store."""
     d = store.data
-    users_total = len(d.get("users", []))
-    bans_active = len([b for b in d.get("bans", {}).values()
-                       if isinstance(b, dict)])
+    users_total = store.get_users_count()
+    bans_active = len(store.list_bans())
     users_map = d.get("users_map", {})
 
     all_stats = (d.get("stats") or {}).get("all", {})
@@ -186,9 +185,11 @@ PINNED_STATS_INTERVAL_SEC = 900  # обновление раз в 15 минут
 
 def _pinned_overview_text() -> str:
     d = store.data
-    users_total = len(d.get("users", []))
-    bans_active = len([b for b in d.get("bans", {}).values() if isinstance(b, dict)])
-    bans_total_hist = len(d.get("bans", {}))
+    users_total = store.get_users_count()
+    # list_bans() сначала чистит просроченные баны — иначе тут могли считаться
+    # давно истёкшие баны как "активные", если долго не было банов/разбанов
+    # (единственное место, где это реально чистилось раньше).
+    bans_active = len(store.list_bans())
     admins_total = len(ADMINS) + len(store.get_extra_admins())
 
     all_stats = (d.get("stats") or {}).get("all", {})
@@ -199,7 +200,7 @@ def _pinned_overview_text() -> str:
     audio_sent = dls.get("audio_sent", 0)
     stars_total = all_stats.get("stars_total", 0)
     errors_total = (all_stats.get("errors") or {}).get("total", 0)
-    bans_total = all_stats.get("bans_total", bans_total_hist)
+    bans_total = all_stats.get("bans_total", 0)
 
     return (
         "📌 <b>Общая статистика TikSaves</b>\n"
@@ -227,6 +228,10 @@ async def _update_pinned_overview(bot: Bot) -> None:
             await bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=text, parse_mode="HTML")
             return
         except Exception as e:
+            if "not modified" in str(e).lower():
+                # Текст не изменился с прошлого раза (не с чем сравнивать) — это
+                # не ошибка, ничего пересоздавать не нужно.
+                return
             log.info("pinned_overview: не смог отредактировать (%s) — пересоздаю сообщение", e)
 
     try:

@@ -82,7 +82,7 @@ def _range_user_totals(day_keys: List[str]) -> Dict[int, Dict[str, int]]:
 def _admin_stats_range_text(start_dt: datetime, end_dt: datetime) -> str:
     day_keys = iter_day_keys(start_dt, end_dt)
     bucket = _sum_range_bucket(day_keys)
-    users_total = len(store.data.get("users", []))
+    users_total = store.get_users_count()
 
     users_new = int(bucket.get("users_new", 0))
     dls = bucket.get("downloads", {}) or {}
@@ -246,7 +246,7 @@ def _admin_stats_text(mode: str) -> str:
             key_view = key
         title = f"📊 <b>Статистика: {nice}</b>\n<i>{html_escape(key_view)}</i>"
 
-    users_total = len(store.data.get("users", []))
+    users_total = store.get_users_count()
     users_new = int(bucket.get("users_new", 0))
 
     dls = bucket.get("downloads", {}) or {}
@@ -616,7 +616,7 @@ def daily_summary_text() -> str:
     errors_total = int((bucket.get("errors", {}) or {}).get("total", 0))
     stars_total = int(bucket.get("stars_total", 0))
     bans_total = int(bucket.get("bans_total", 0))
-    users_total = len(store.data.get("users", []))
+    users_total = store.get_users_count()
 
     return (
         "📊 <b>Итоги дня</b>\n"

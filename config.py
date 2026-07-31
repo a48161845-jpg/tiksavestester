@@ -45,6 +45,13 @@ LOG_CHANNEL_ID = int(os.getenv("LOG_CHANNEL_ID", "-1003763229922"))
 
 TIKTOK_RE = re.compile(r"(https?://)?(www\.)?(tiktok\.com|vm\.tiktok\.com|vt\.tiktok\.com)/", re.I)
 
+# ========= YOUTUBE =========
+YOUTUBE_RE = re.compile(
+    r"(https?://)?(www\.|m\.)?(youtube\.com/(watch\?|shorts/|live/)|youtu\.be/)", re.I
+)
+YOUTUBE_MAX_DURATION_SEC = int(os.getenv("YOUTUBE_MAX_DURATION_SEC", "1800"))  # 30 минут
+YOUTUBE_MAX_HEIGHT = int(os.getenv("YOUTUBE_MAX_HEIGHT", "720"))
+
 MEDIA_GROUP_LIMIT = 10
 PAGE_SIZE = 10
 PENDING_TTL_SEC = 300
@@ -98,11 +105,9 @@ ALT_PROVIDER = os.getenv("ALT_PROVIDER", "none").strip().lower()
 APIFY_TOKEN = os.getenv("APIFY_TOKEN", "").strip()
 APIFY_ACTOR = os.getenv("APIFY_ACTOR", "apilabs/tiktok-downloader").strip()
 
-# Бесплатный запасной источник без ключа (доп. звено цепочки провайдеров).
-# Если у него сменится схема ответа/адрес — можно выключить через .env
-# (ENABLE_TIKLYDOWN=0), не трогая код.
-TIKLYDOWN_URL = os.getenv("TIKLYDOWN_URL", "https://api.tiklydown.eu.org/api/download").strip()
-ENABLE_TIKLYDOWN = os.getenv("ENABLE_TIKLYDOWN", "1").strip() != "0"
+# Небольшая задержка между запросами к бесплатному tikwm API — чтобы не
+# словить рейт-лимит/бан на их стороне при частых запросах.
+TIKWM_COOLDOWN_SEC = float(os.getenv("TIKWM_COOLDOWN_SEC", "1.2"))
 
 BAN_DURATION_SEC = int(os.getenv("BAN_DURATION_SEC", str(24 * 3600)))  # 24 часа по умолчанию
 BAN_REASON_SPAM = "Авто-бан: спам/флуд"
