@@ -1,20 +1,18 @@
 """
 Базовые пользовательские и общие команды бота.
 """
-import contextlib
-
 from aiogram.filters import Command, CommandObject
 from aiogram.types import Message, LinkPreviewOptions
 
 from globals_state import dp
-from config import log, REF_POINTS_PER_REFERRAL
+from config import log
 from helpers import html_escape, is_admin, parse_stats_mode, parse_date_token
 from storage import store
 from user_label import resolve_user_label
 from gates import gate_message
 from logging_channel import log_event, log_admin_action_to_channel, format_user_for_log
 from admin_log_file import log_admin
-from referral import new_referral_notify_text
+from referral import top_referrers_text
 from keyboards import (
     START_TEXT,
     HELP_TEXT,
@@ -54,17 +52,15 @@ async def start_cmd(message: Message, command: CommandObject):
         )
 
         # ---- реферальная система: /start?start=REFERRER_ID ----
+        # Баллы НЕ начисляются здесь — только фиксируем, кто кого пригласил.
+        # Начисление происходит один раз, при первом успешном скачивании
+        # приглашённого (см. _reward_referral_if_first_download в main_handler.py
+        # и handlers/picker_callbacks.py) — так реферал засчитывается только
+        # если реально начал пользоваться ботом, а не просто нажал /start.
         payload = (command.args or "").strip()
         if payload.isdigit():
             referrer_id = int(payload)
-            if store.set_referral(uid, referrer_id):
-                rs = store.add_ref_points(referrer_id, REF_POINTS_PER_REFERRAL)
-                with contextlib.suppress(Exception):
-                    await message.bot.send_message(
-                        referrer_id,
-                        new_referral_notify_text(label, rs),
-                        parse_mode="HTML",
-                    )
+            store.set_referral(uid, referrer_id)
 
     if not await gate_message(message, label):
         return
@@ -224,6 +220,11 @@ async def top_cmd(message: Message):
         return
 
     parts_all = (message.text or "").split()
+
+    if len(parts_all) >= 2 and parts_all[1].strip().lower() in {"ref", "реф", "referral", "referrals"}:
+        await message.answer(top_referrers_text(), parse_mode="HTML")
+        return
+
     if len(parts_all) >= 3:
         d1 = parse_date_token(parts_all[1])
         d2 = parse_date_token(parts_all[2])

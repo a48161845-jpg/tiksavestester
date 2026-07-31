@@ -13,6 +13,7 @@ from . import admin_callbacks
 from . import donate_callbacks
 from . import help_callbacks
 from . import referral_commands
+from . import referral_admin_commands
 from . import referral_callbacks
 from . import picker_callbacks
 from . import video_choice_callbacks

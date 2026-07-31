@@ -10,7 +10,7 @@ from aiogram.types import Message
 from globals_state import dp
 from helpers import html_escape, code, is_admin, parse_duration, format_msk
 from storage import store
-from user_label import resolve_user_label
+from user_label import resolve_user_label, resolve_uid_from_arg
 from gates import gate_message
 from logging_channel import log_event, log_admin_action_to_channel, format_user_for_log
 from admin_log_file import log_admin
@@ -242,25 +242,10 @@ async def info_cmd(message: Message):
         return
 
     raw = parts[1].strip()
-    uid: Optional[int] = None
-    if raw.isdigit():
-        uid = int(raw)
-    else:
-        username = raw[1:] if raw.startswith("@") else raw
-        try:
-            chat = await message.bot.get_chat(username)
-            uid = int(chat.id)
-        except Exception:
-            # fallback to stored usernames
-            found_uid: Optional[int] = None
-            for uid_str, label in (store.data.get("users_map", {}) or {}).items():
-                if f"@{username}".lower() in str(label).lower():
-                    found_uid = int(uid_str)
-                    break
-            if found_uid is None:
-                await message.answer("❌ Пользователь не найден. Проверь ID или username.", parse_mode="HTML")
-                return
-            uid = found_uid
+    uid = await resolve_uid_from_arg(message.bot, raw)
+    if uid is None:
+        await message.answer("❌ Пользователь не найден. Проверь ID или username.", parse_mode="HTML")
+        return
     who_label = await resolve_user_label(message.bot, uid)
     store.set_user_label(uid, who_label)
 
@@ -280,6 +265,9 @@ async def info_cmd(message: Message):
     stars_by_user = (store.data.get("user_stats", {}) or {}).get("stars", {}) or {}
     stars = int(stars_by_user.get(str(uid), 0))
 
+    ref_stats = store.get_ref_stats(uid)
+    invited_cnt = len(store.referrals_of(uid))
+
     ban = store.get_ban(uid)
     if ban:
         ban_text = f"🚫 Бан: <b>да</b> (до <b>{format_msk(int(ban.get('until', 0)))} МСК</b>)"
@@ -295,7 +283,9 @@ async def info_cmd(message: Message):
         f"🎬 Видео скачано: <b>{v_ops}</b> операций (файлов: <b>{v_sent}</b>)\n"
         f"🖼️ Фото скачано: <b>{p_ops}</b> операций (фото: <b>{p_sent}</b>)\n"
         f"🎵 Музыка скачано: <b>{a_sent}</b>\n"
-        f"⭐ Stars пожертвовано: <b>{stars}</b>\n",
+        f"⭐ Stars пожертвовано: <b>{stars}</b>\n\n"
+        f"🎁 Приглашено рефералов: <b>{invited_cnt}</b>\n"
+        f"🎟 Баллов начислено: <b>{ref_stats['ref_points']}</b>\n",
         parse_mode="HTML",
     )
 

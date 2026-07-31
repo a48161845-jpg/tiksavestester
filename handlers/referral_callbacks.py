@@ -10,7 +10,7 @@ from aiogram import F
 from aiogram.types import CallbackQuery
 
 from globals_state import dp
-from config import LOG_CHANNEL_ID
+from config import REFERRAL_LOG_CHANNEL_ID
 from helpers import is_admin, code, now_msk_str
 from storage import store
 from user_label import resolve_user_label
@@ -62,17 +62,6 @@ async def ref_cb(call: CallbackQuery):
     if action == "shop":
         rs = store.get_ref_stats(uid)
         await _safe_edit(call, gift_shop_text(uid), gift_shop_kb(rs["ref_points"]))
-        await call.answer()
-        return
-
-    if action == "myrefs":
-        rs = store.get_ref_stats(uid)
-        text = (
-            "👥 <b>Твои рефералы</b>\n\n"
-            f"Приглашено: <b>{rs['referrals_count']}</b>\n"
-            f"Баланс: <b>{rs['ref_points']} 🎟</b>"
-        )
-        await _safe_edit(call, text, ref_back_kb())
         await call.answer()
         return
 
@@ -165,7 +154,7 @@ async def gift_cb(call: CallbackQuery):
         )
         with contextlib.suppress(Exception):
             await call.bot.send_message(
-                LOG_CHANNEL_ID,
+                REFERRAL_LOG_CHANNEL_ID,
                 admin_text,
                 parse_mode="HTML",
                 reply_markup=gift_admin_kb(req_id),
@@ -229,7 +218,7 @@ async def admin_gift_cb(call: CallbackQuery):
             f"Администратор:\n{format_user_for_log(admin_label, admin_id)}"
         )
         with contextlib.suppress(Exception):
-            await call.bot.send_message(LOG_CHANNEL_ID, log_text, parse_mode="HTML")
+            await call.bot.send_message(REFERRAL_LOG_CHANNEL_ID, log_text, parse_mode="HTML")
         return
 
     if action == "no":
@@ -258,7 +247,7 @@ async def admin_gift_cb(call: CallbackQuery):
             f"Возвращено:\n{price} 🎟"
         )
         with contextlib.suppress(Exception):
-            await call.bot.send_message(LOG_CHANNEL_ID, log_text, parse_mode="HTML")
+            await call.bot.send_message(REFERRAL_LOG_CHANNEL_ID, log_text, parse_mode="HTML")
         return
 
     await call.answer()

@@ -1,6 +1,13 @@
 """
 Callback-обработчик фото-пикера: пагинация, выбор отдельных фото,
-скачивание выбранного/всего и музыки (callback_data, начинающийся на "pk:").
+музыка/описание (галочки-переключатели), скачивание выбранного/всего.
+
+callback_data начинается на "pk:" и всегда содержит req_id — уникальный
+идентификатор конкретного сообщения-пикера (НЕ uid!). Это важно: если
+пользователь пришлёт несколько ссылок на слайдшоу подряд, у него может быть
+открыто сразу несколько пикеров одновременно — раньше состояние хранилось
+по uid, и второй пикер перезаписывал данные первого, отчего кнопки под
+старым сообщением путали/сбрасывали чужой выбор.
 """
 import contextlib
 
@@ -9,7 +16,7 @@ from aiogram.types import CallbackQuery
 
 from globals_state import dp
 import globals_state
-from config import PAGE_SIZE, MSG_DL, MSG_PHOTO, CAPTION_PHOTO
+from config import PAGE_SIZE, MSG_DL, MSG_PHOTO, CAPTION_PHOTO, REF_POINTS_PER_REFERRAL
 from helpers import code
 from storage import store
 from user_label import resolve_user_label
@@ -17,8 +24,24 @@ from limiters import lim
 from logging_channel import log_event, format_user_for_log
 from strikes import add_download_strike
 from send_helpers import send_photos, send_music_if_any, send_description_if_any
+from referral import new_referral_notify_text
 from picker_state import pending, cleanup_pending, picker_kb
 from keyboards import post_download_kb
+
+
+async def _reward_referral_if_first_download(bot, uid: int, label: str) -> None:
+    """Начисляет баллы пригласившему — только один раз, при первом успешном скачивании uid."""
+    reward = store.try_reward_referral(uid, REF_POINTS_PER_REFERRAL)
+    if not reward:
+        return
+    with contextlib.suppress(Exception):
+        await bot.send_message(
+            reward["referrer_id"],
+            new_referral_notify_text(
+                label, {"referrals_count": reward["referrals_count"], "ref_points": reward["ref_points"]}
+            ),
+            parse_mode="HTML",
+        )
 
 
 @dp.callback_query(F.data.startswith("pk:"))
@@ -33,7 +56,12 @@ async def picker_cb(call: CallbackQuery):
         return
 
     cleanup_pending()
-    st = pending.get(uid)
+
+    parts = (call.data or "").split(":")
+    act = parts[1] if len(parts) > 1 else ""
+    req_id = parts[2] if len(parts) > 2 else ""
+
+    st = pending.get(req_id)
     if not st:
         await call.answer("⏱️ Выбор устарел. Скинь ссылку ещё раз.", show_alert=True)
         with contextlib.suppress(Exception):
@@ -41,12 +69,13 @@ async def picker_cb(call: CallbackQuery):
                 await call.message.delete()
         return
 
+    if st.get("uid") != uid:
+        await call.answer("Это не твой выбор фото.", show_alert=True)
+        return
+
     if not call.message:
         await call.answer()
         return
-
-    parts = (call.data or "").split(":")
-    act = parts[1] if len(parts) > 1 else ""
 
     async def gate_download() -> bool:
         ok, wait = lim.dl_hit(uid)
@@ -82,23 +111,23 @@ async def picker_cb(call: CallbackQuery):
         return
 
     if act == "cn":
-        pending.pop(uid, None)
+        pending.pop(req_id, None)
         await call.answer("Ок.")
         with contextlib.suppress(Exception):
             await call.message.delete()
         return
 
     if act == "pg":
-        step = parts[2] if len(parts) > 2 else "+1"
+        step = parts[3] if len(parts) > 3 else "+1"
         total = len(st["photos"])
         pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
         st["page"] = (st["page"] + (-1 if step == "-1" else 1)) % pages
         await call.answer()
-        await call.message.edit_reply_markup(reply_markup=picker_kb(uid))
+        await call.message.edit_reply_markup(reply_markup=picker_kb(req_id))
         return
 
     if act == "t":
-        idx = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else -1
+        idx = int(parts[3]) if len(parts) > 3 and parts[3].isdigit() else -1
         if 0 <= idx < len(st["photos"]):
             sel: set[int] = st["selected"]
             if idx in sel:
@@ -106,7 +135,7 @@ async def picker_cb(call: CallbackQuery):
             else:
                 sel.add(idx)
         await call.answer()
-        await call.message.edit_reply_markup(reply_markup=picker_kb(uid))
+        await call.message.edit_reply_markup(reply_markup=picker_kb(req_id))
         return
 
     if act == "clr":
@@ -114,7 +143,7 @@ async def picker_cb(call: CallbackQuery):
         st["want_music"] = False
         st["want_description"] = False
         await call.answer("🧹 Очищено")
-        await call.message.edit_reply_markup(reply_markup=picker_kb(uid))
+        await call.message.edit_reply_markup(reply_markup=picker_kb(req_id))
         return
 
     if act == "selpage":
@@ -126,21 +155,21 @@ async def picker_cb(call: CallbackQuery):
         for i in range(start, end):
             sel.add(i)
         await call.answer("✅ Страница выбрана!")
-        await call.message.edit_reply_markup(reply_markup=picker_kb(uid))
+        await call.message.edit_reply_markup(reply_markup=picker_kb(req_id))
         return
 
     if act == "togmusic":
         if st.get("music"):
             st["want_music"] = not st.get("want_music", False)
         await call.answer("🎵 Музыка добавлена" if st.get("want_music") else "🎵 Музыка убрана")
-        await call.message.edit_reply_markup(reply_markup=picker_kb(uid))
+        await call.message.edit_reply_markup(reply_markup=picker_kb(req_id))
         return
 
     if act == "togdesc":
         if st.get("description"):
             st["want_description"] = not st.get("want_description", False)
         await call.answer("📝 Описание добавлено" if st.get("want_description") else "📝 Описание убрано")
-        await call.message.edit_reply_markup(reply_markup=picker_kb(uid))
+        await call.message.edit_reply_markup(reply_markup=picker_kb(req_id))
         return
 
     if act == "sendall":
@@ -156,7 +185,7 @@ async def picker_cb(call: CallbackQuery):
             await call.answer()
             return
 
-        pending.pop(uid, None)
+        pending.pop(req_id, None)
         with contextlib.suppress(Exception):
             await call.message.delete()
 
@@ -168,6 +197,9 @@ async def picker_cb(call: CallbackQuery):
             await send_music_if_any(call.message, globals_state.g_provider, st.get("music"), uid=uid, label=label, src=src)
         if want_desc:
             await send_description_if_any(call.message, st.get("description"))
+
+        if cnt:
+            await _reward_referral_if_first_download(call.bot, uid, label)
 
         await log_event(
             call.bot,
@@ -201,7 +233,7 @@ async def picker_cb(call: CallbackQuery):
             await call.answer()
             return
 
-        pending.pop(uid, None)
+        pending.pop(req_id, None)
         with contextlib.suppress(Exception):
             await call.message.delete()
 
@@ -217,6 +249,7 @@ async def picker_cb(call: CallbackQuery):
             await send_description_if_any(call.message, st.get("description"))
 
         if cnt:
+            await _reward_referral_if_first_download(call.bot, uid, label)
             await log_event(
                 call.bot,
                 "photodl",

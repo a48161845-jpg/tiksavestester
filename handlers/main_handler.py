@@ -22,6 +22,7 @@ from config import (
     MSG_DL,
     CAPTION_VIDEO,
     PHOTO_WARNING_TEXT,
+    REF_POINTS_PER_REFERRAL,
 )
 from helpers import (
     html_escape,
@@ -42,6 +43,22 @@ from send_helpers import send_video_smart
 from picker_state import pending, cleanup_pending, video_extras, new_req_id, cleanup_video_extras, picker_kb
 from keyboards import under_video_kb
 from donate import waiting_stars_amount, send_stars_invoice
+from referral import new_referral_notify_text
+
+
+async def _reward_referral_if_first_download(bot, uid: int, label: str) -> None:
+    """Начисляет баллы пригласившему — только один раз, при первом успешном скачивании uid."""
+    reward = store.try_reward_referral(uid, REF_POINTS_PER_REFERRAL)
+    if not reward:
+        return
+    with contextlib.suppress(Exception):
+        await bot.send_message(
+            reward["referrer_id"],
+            new_referral_notify_text(
+                label, {"referrals_count": reward["referrals_count"], "ref_points": reward["ref_points"]}
+            ),
+            parse_mode="HTML",
+        )
 
 
 @dp.message(F.text)
@@ -121,7 +138,8 @@ async def main_handler(message: Message, client: TikWMClient, switcher: Provider
                 await message.answer(PHOTO_WARNING_TEXT, parse_mode="HTML", link_preview_options=LinkPreviewOptions(is_disabled=True))
 
                 cleanup_pending()
-                pending[uid] = {
+                pending[req_id] = {
+                    "uid": uid,
                     "photos": photos,
                     "music": music,
                     "description": description,
@@ -133,7 +151,7 @@ async def main_handler(message: Message, client: TikWMClient, switcher: Provider
                     "src": url or text,
                 }
                 with contextlib.suppress(Exception):
-                    await status.edit_text("🖼️ Выбери фото по номерам или выдели страницу 👇", reply_markup=picker_kb(uid))
+                    await status.edit_text("🖼️ Выбери фото по номерам или выдели страницу 👇", reply_markup=picker_kb(req_id))
                 return
 
             if not video:
@@ -149,6 +167,7 @@ async def main_handler(message: Message, client: TikWMClient, switcher: Provider
                 reply_markup=under_video_kb(has_music=bool(music), has_description=bool(description), req_id=req_id),
             )
             store.inc_download(uid, "video", items=1)
+            await _reward_referral_if_first_download(message.bot, uid, label)
             with contextlib.suppress(Exception):
                 await status.delete()
             await log_event(
