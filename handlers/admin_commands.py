@@ -363,7 +363,7 @@ async def broadcast_cmd(message: Message):
     pending_admin_broadcast[admin_id] = "custom"
     pending_admin_broadcast_text[admin_id] = broadcast_html
     pending_admin_broadcast_source[admin_id] = "cmd"
-    users_cnt = len(store.data.get("users", []))
+    users_cnt = store.get_users_count()
     await message.answer(
         "📣 <b>Подтверждение рассылки</b>\n\n"
         "Тип: <b>Своя рассылка</b>\n"
@@ -388,7 +388,7 @@ async def reminder_message_cmd(message: Message):
     pending_admin_broadcast[admin_id] = "reminder"
     pending_admin_broadcast_text.pop(admin_id, None)
     pending_admin_broadcast_source[admin_id] = "cmd"
-    users_cnt = len(store.data.get("users", []))
+    users_cnt = store.get_users_count()
     await message.answer(
         "📣 <b>Подтверждение рассылки</b>\n\n"
         "Тип: <b>Напоминание</b>\n"
@@ -413,7 +413,7 @@ async def advertisement_message_cmd(message: Message):
     pending_admin_broadcast[admin_id] = "advert"
     pending_admin_broadcast_text.pop(admin_id, None)
     pending_admin_broadcast_source[admin_id] = "cmd"
-    users_cnt = len(store.data.get("users", []))
+    users_cnt = store.get_users_count()
     await message.answer(
         "📣 <b>Подтверждение рассылки</b>\n\n"
         "Тип: <b>Реклама</b>\n"

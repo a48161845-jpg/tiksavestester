@@ -150,7 +150,7 @@ async def admin_cb(call: CallbackQuery):
         pending_admin_broadcast[uid] = "reminder"
         pending_admin_broadcast_text.pop(uid, None)
         pending_admin_broadcast_source[uid] = "panel"
-        users_cnt = len(store.data.get("users", []))
+        users_cnt = store.get_users_count()
         if not call.message:
             await call.answer("Ошибка: сообщение недоступно.", show_alert=True)
             return
@@ -171,7 +171,7 @@ async def admin_cb(call: CallbackQuery):
         pending_admin_broadcast[uid] = "advert"
         pending_admin_broadcast_text.pop(uid, None)
         pending_admin_broadcast_source[uid] = "panel"
-        users_cnt = len(store.data.get("users", []))
+        users_cnt = store.get_users_count()
         if not call.message:
             await call.answer("Ошибка: сообщение недоступно.", show_alert=True)
             return
