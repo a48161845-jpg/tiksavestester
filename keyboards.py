@@ -295,7 +295,15 @@ ADMIN_HELP_TEXT = (
 
     "🏆 <b>Топ пользователей</b>\n"
     f"├ {code('/top d')} {code('/top n')} {code('/top m')} {code('/top y')} {code('/top all')}\n"
-    f"└ {code('/top 2026-02-01 2026-02-07')} — диапазон\n\n"
+    f"├ {code('/top 2026-02-01 2026-02-07')} — диапазон\n"
+    f"└ {code('/top ref')} — топ по рефералам\n\n"
+
+    "🎁 <b>Реферальная система</b>\n"
+    f"├ {code('/refid ID')} — кто пригласил пользователя\n"
+    f"├ {code('/refinfo ID')} — список его рефералов\n"
+    f"├ {code('/refpoints ID +50')} — начислить/списать баллы\n"
+    f"├ {code('/refcount ID +3')} — скорректировать счётчик рефералов\n"
+    f"└ {code('/refreset ID')} — обнулить баллы и рефералов\n\n"
 
     "🚫 <b>Баны</b>\n"
     f"├ {code('/ban ID 2h причина')} — забанить\n"
@@ -309,7 +317,7 @@ ADMIN_HELP_TEXT = (
     f"└ {code('/admindel ID')} — удалить (только суперадмин)\n\n"
 
     "👤 <b>Пользователь</b>\n"
-    f"└ {code('/info ID')} — информация о пользователе\n\n"
+    f"└ {code('/info ID')} — информация о пользователе (включая рефералов)\n\n"
 
     "🗄 <b>База данных</b>\n"
     f"├ {code('/dbfile')} — дамп БД файлом\n"
@@ -346,7 +354,6 @@ def ref_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="🎁 Магазин подарков", callback_data="ref:shop")],
-            [InlineKeyboardButton(text="👥 Мои рефералы", callback_data="ref:myrefs")],
             [InlineKeyboardButton(text="📦 Мои заявки", callback_data="ref:myrequests")],
             [InlineKeyboardButton(text="🏆 Топ рефереров", callback_data="ref:top")],
             [InlineKeyboardButton(text="📖 Как это работает", callback_data="ref:howitworks")],

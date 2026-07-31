@@ -452,25 +452,53 @@ class Storage:
     # ---------- referrals ----------
     def get_referrer(self, uid: int) -> Optional[int]:
         v = self.data.get("referrals", {}).get(str(uid))
-        return int(v) if v is not None else None
+        if v is None:
+            return None
+        return int(v["referrer_id"]) if isinstance(v, dict) else int(v)
 
     def set_referral(self, uid: int, referrer_id: int) -> bool:
         """
-        Фиксирует, что uid пришёл по ссылке referrer_id.
-        Возвращает True, только если это реально новая, валидная запись:
-        сам на себя не считается, и повторно один и тот же реферал не засчитывается.
+        Фиксирует, что uid пришёл по ссылке referrer_id (баллы пока НЕ начисляются —
+        это происходит один раз, при первом успешном скачивании uid, см.
+        try_reward_referral). Возвращает True, только если это реально новая,
+        валидная запись: сам на себя не считается, повторно один и тот же
+        реферал не переписывается.
         """
         if uid == referrer_id:
             return False
         refs = self.data.setdefault("referrals", {})
         if str(uid) in refs:
             return False
-        refs[str(uid)] = int(referrer_id)
+        refs[str(uid)] = {"referrer_id": int(referrer_id), "rewarded": False, "ts": int(time.time())}
         self.data.setdefault("referrals_log", []).append(
             {"user_id": uid, "referrer_id": referrer_id, "ts": int(time.time())}
         )
         self._mark_dirty()
         return True
+
+    def try_reward_referral(self, uid: int, points: int) -> Optional[Dict[str, int]]:
+        """
+        Начисляет баллы пригласившему за uid — но только один раз, при первом
+        успешном скачивании этого uid (а не при простом /start). Возвращает
+        {"referrer_id","referrals_count","ref_points"} если начисление произошло
+        сейчас, иначе None (нет реферала или уже начислено раньше).
+        """
+        refs = self.data.get("referrals", {})
+        rec = refs.get(str(uid))
+        if rec is None:
+            return None
+        if isinstance(rec, dict):
+            if rec.get("rewarded"):
+                return None
+            referrer_id = int(rec["referrer_id"])
+            rec["rewarded"] = True
+        else:
+            # обратная совместимость со старым форматом записи (просто int)
+            referrer_id = int(rec)
+            refs[str(uid)] = {"referrer_id": referrer_id, "rewarded": True, "ts": int(time.time())}
+        rs = self.add_ref_points(referrer_id, points)
+        self._mark_dirty()
+        return {"referrer_id": referrer_id, **rs}
 
     def add_ref_points(self, referrer_id: int, points: int) -> Dict[str, int]:
         """Начисляет баллы пригласившему и увеличивает счётчик рефералов."""
@@ -489,24 +517,57 @@ class Storage:
         }
 
     def add_ref_points_delta(self, uid: int, delta: int) -> int:
-        """Списание/возврат баллов (при покупке подарка / отказе в выдаче)."""
+        """Списание/возврат/ручная корректировка баллов админом."""
         rs = self.data.setdefault("ref_stats", {})
         rec = rs.setdefault(str(uid), {"referrals_count": 0, "ref_points": 0})
         rec["ref_points"] = int(rec.get("ref_points", 0)) + int(delta)
         self._mark_dirty()
         return int(rec["ref_points"])
 
+    def add_ref_count_delta(self, uid: int, delta: int) -> int:
+        """Ручная корректировка счётчика рефералов админом (не уходит в минус)."""
+        rs = self.data.setdefault("ref_stats", {})
+        rec = rs.setdefault(str(uid), {"referrals_count": 0, "ref_points": 0})
+        rec["referrals_count"] = max(0, int(rec.get("referrals_count", 0)) + int(delta))
+        self._mark_dirty()
+        return int(rec["referrals_count"])
+
+    def reset_ref_stats(self, uid: int) -> None:
+        """Полностью обнуляет баллы и счётчик рефералов пользователя."""
+        rs = self.data.setdefault("ref_stats", {})
+        rs[str(uid)] = {"referrals_count": 0, "ref_points": 0}
+        self._mark_dirty()
+
+    def total_referrals_count(self) -> int:
+        """Сколько всего людей пришло по реферальным ссылкам (все записи, не только вознаграждённые)."""
+        return len(self.data.get("referrals", {}))
+
+    def referrals_of(self, referrer_id: int) -> List[int]:
+        """Список uid всех, кого пригласил referrer_id (по записям в 'referrals')."""
+        refs = self.data.get("referrals", {})
+        out: List[int] = []
+        for uid_str, rec in refs.items():
+            rid = rec.get("referrer_id") if isinstance(rec, dict) else rec
+            try:
+                if int(rid) == int(referrer_id):
+                    out.append(int(uid_str))
+            except (TypeError, ValueError):
+                continue
+        return out
+
     def top_referrers(self, limit: int = 10) -> List[Tuple[int, int]]:
+        from helpers import is_admin  # локальный импорт — без цикла на уровне модулей
         rs = self.data.get("ref_stats", {})
         items = [(int(uid), int((rec or {}).get("referrals_count", 0))) for uid, rec in rs.items()]
-        items = [x for x in items if x[1] > 0]
+        items = [x for x in items if x[1] > 0 and not is_admin(x[0])]
         items.sort(key=lambda x: x[1], reverse=True)
         return items[:limit]
 
     def ref_rank(self, uid: int) -> Optional[int]:
+        from helpers import is_admin
         rs = self.data.get("ref_stats", {})
         items = sorted(
-            ((int(u), int((r or {}).get("referrals_count", 0))) for u, r in rs.items()),
+            ((int(u), int((r or {}).get("referrals_count", 0))) for u, r in rs.items() if not is_admin(int(u))),
             key=lambda x: x[1],
             reverse=True,
         )

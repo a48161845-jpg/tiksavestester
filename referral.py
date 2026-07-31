@@ -103,8 +103,8 @@ def my_requests_text(uid: int) -> str:
     return "\n".join(lines)
 
 
-def top_referrers_text(uid: int) -> str:
-    top = store.top_referrers(REF_TOP_LIMIT)
+def top_referrers_text(uid: Optional[int] = None, *, limit: Optional[int] = None) -> str:
+    top = store.top_referrers(limit or REF_TOP_LIMIT)
     medals = ["🥇", "🥈", "🥉"]
     lines = ["🏆 <b>Топ рефереров Tiksaves</b>\n"]
     if not top:
@@ -113,6 +113,9 @@ def top_referrers_text(uid: int) -> str:
         medal = medals[i] if i < 3 else f"{i + 1}."
         label = store.get_user_label(ref_uid)
         lines.append(f"{medal} {html_escape(label)}\n👥 {cnt} рефералов\n")
+
+    if uid is None:
+        return "\n".join(lines).rstrip()
 
     rank = store.ref_rank(uid)
     rs = store.get_ref_stats(uid)

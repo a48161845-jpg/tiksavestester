@@ -5,6 +5,8 @@
 При каждом вызове обновляет данные пользователя в хранилище —
 так ники/имена всегда актуальны даже если пользователь их менял.
 """
+from typing import Optional
+
 from aiogram import Bot
 
 
@@ -51,3 +53,28 @@ async def resolve_user_label(bot: Bot, uid: int) -> str:
         except Exception:
             pass
     return f"{uid}"
+
+
+async def resolve_uid_from_arg(bot: Bot, raw: str) -> Optional[int]:
+    """
+    Резолвит uid из аргумента админ-команды: числовой ID, @username или
+    просто username без @. Сначала пробует Telegram API (get_chat), если
+    не вышло — ищет по сохранённым меткам пользователей в store.
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    if raw.lstrip("-").isdigit():
+        return int(raw)
+
+    from storage import store
+
+    username = raw[1:] if raw.startswith("@") else raw
+    try:
+        chat = await bot.get_chat(username)
+        return int(chat.id)
+    except Exception:
+        for uid_str, label in (store.data.get("users_map", {}) or {}).items():
+            if f"@{username}".lower() in str(label).lower():
+                return int(uid_str)
+        return None

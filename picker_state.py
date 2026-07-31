@@ -1,14 +1,16 @@
 """
 Состояние "ожидающих выбора" сущностей между шагами диалога:
-- pending: фото-пикер (выбор конкретных фото из слайдшоу, музыка/описание —
-  тоже переключатели-галочки, скачиваются вместе с фото по кнопке "Продолжить"/
-  "Скачать всё", а не сразу по тапу);
-- pending_video: задел на выбор перед скачиванием видео (см. video choice callbacks);
-- video_extras: музыка/описание/источник для кнопок под конкретным отправленным
-  видео-сообщением. Ключ — уникальный req_id (не uid!), потому что бот теперь
-  может обрабатывать несколько скачиваний одного пользователя параллельно —
-  если бы это хранилось по uid, второе скачивание могло перезаписать данные
-  первого, и кнопка под старым видео присылала бы музыку/описание от нового.
+- pending: фото-пикер (выбор фото из слайдшоу, галочки музыки/описания).
+  Ключ — req_id (не uid!): у одного пользователя может быть открыто сразу
+  несколько сообщений-пикеров (если он прислал несколько ссылок подряд, а
+  бот теперь обрабатывает несколько скачиваний параллельно) — раньше, когда
+  состояние хранилось по uid, второй пикер перезаписывал данные первого,
+  и кнопки под старым сообщением начинали путать/сбрасывать чужой выбор
+  ("жмёшь на одно — показывает одно, потом другое пропадает"). Теперь у
+  каждого сообщения-пикера свой req_id, зашитый прямо в его кнопки.
+- pending_video: задел на выбор перед скачиванием видео (video_choice, legacy);
+- video_extras: музыка/описание/источник для кнопок под конкретным видео —
+  тоже по req_id (та же гонка была исправлена раньше).
 """
 import time
 import uuid
@@ -18,7 +20,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from config import PENDING_TTL_SEC, PAGE_SIZE
 
-pending: Dict[int, Dict[str, Any]] = {}
+pending: Dict[str, Dict[str, Any]] = {}
 pending_video: Dict[int, Dict[str, Any]] = {}
 
 video_extras: Dict[str, Dict[str, Any]] = {}
@@ -38,9 +40,9 @@ def cleanup_video_extras() -> None:
 
 def cleanup_pending() -> None:
     now = time.time()
-    dead = [uid for uid, st in pending.items() if now - float(st["ts"]) > PENDING_TTL_SEC]
-    for uid in dead:
-        pending.pop(uid, None)
+    dead = [rid for rid, st in pending.items() if now - float(st["ts"]) > PENDING_TTL_SEC]
+    for rid in dead:
+        pending.pop(rid, None)
 
 
 def cleanup_pending_video() -> None:
@@ -50,8 +52,8 @@ def cleanup_pending_video() -> None:
         pending_video.pop(uid, None)
 
 
-def picker_kb(uid: int) -> InlineKeyboardMarkup:
-    st = pending[uid]
+def picker_kb(req_id: str) -> InlineKeyboardMarkup:
+    st = pending[req_id]
     photos: List[str] = st["photos"]
     selected: set[int] = st["selected"]
     page: int = st["page"]
@@ -70,42 +72,42 @@ def picker_kb(uid: int) -> InlineKeyboardMarkup:
     for idx in range(start, end):
         num = idx + 1
         txt = f"{'✅ ' if idx in selected else ''}{num}"
-        row.append(InlineKeyboardButton(text=txt, callback_data=f"pk:t:{idx}"))
+        row.append(InlineKeyboardButton(text=txt, callback_data=f"pk:t:{req_id}:{idx}"))
         if len(row) == 5:
             rows.append(row)
             row = []
     if row:
         rows.append(row)
 
-    rows.append([InlineKeyboardButton(text="✅ Выбрать страницу", callback_data="pk:selpage")])
-    rows.append([InlineKeyboardButton(text="🔽 Скачать всё", callback_data="pk:sendall")])
+    rows.append([InlineKeyboardButton(text="✅ Выбрать страницу", callback_data=f"pk:selpage:{req_id}")])
+    rows.append([InlineKeyboardButton(text="🔽 Скачать всё", callback_data=f"pk:sendall:{req_id}")])
 
     # Музыка/описание — тоже галочки (переключатели), а не мгновенная отправка:
     # выбираешь, что нужно, и жмёшь "Продолжить"/"Скачать всё" — всё уходит вместе.
     row2: List[InlineKeyboardButton] = []
     if st.get("music"):
         checked = "✅ " if st.get("want_music") else ""
-        row2.append(InlineKeyboardButton(text=f"{checked}🎵 Музыка", callback_data="pk:togmusic"))
+        row2.append(InlineKeyboardButton(text=f"{checked}🎵 Музыка", callback_data=f"pk:togmusic:{req_id}"))
     if st.get("description"):
         checked = "✅ " if st.get("want_description") else ""
-        row2.append(InlineKeyboardButton(text=f"{checked}📝 Описание", callback_data="pk:togdesc"))
+        row2.append(InlineKeyboardButton(text=f"{checked}📝 Описание", callback_data=f"pk:togdesc:{req_id}"))
     if row2:
         rows.append(row2)
 
-    rows.append([InlineKeyboardButton(text="🧹 Очистить", callback_data="pk:clr")])
+    rows.append([InlineKeyboardButton(text="🧹 Очистить", callback_data=f"pk:clr:{req_id}")])
 
     if pages > 1:
         rows.append(
             [
-                InlineKeyboardButton(text="⬅️", callback_data="pk:pg:-1"),
-                InlineKeyboardButton(text=f"{page+1}/{pages}", callback_data="pk:n"),
-                InlineKeyboardButton(text="➡️", callback_data="pk:pg:+1"),
+                InlineKeyboardButton(text="⬅️", callback_data=f"pk:pg:{req_id}:-1"),
+                InlineKeyboardButton(text=f"{page+1}/{pages}", callback_data=f"pk:n:{req_id}"),
+                InlineKeyboardButton(text="➡️", callback_data=f"pk:pg:{req_id}:+1"),
             ]
         )
 
     rows.append(
         [
-            InlineKeyboardButton(text=f"➡️ Продолжить ({len(selected)})", callback_data="pk:go"),
+            InlineKeyboardButton(text=f"➡️ Продолжить ({len(selected)})", callback_data=f"pk:go:{req_id}"),
         ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)

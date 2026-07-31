@@ -151,5 +151,9 @@ GIFTS = [
 ]
 GIFTS_BY_KEY = {g["key"]: g for g in GIFTS}
 
+# Отдельный канал для заявок на подарки / выдачи призов реферальной системы
+# (не мешаем с общим лог-каналом бота).
+REFERRAL_LOG_CHANNEL_ID = int(os.getenv("REFERRAL_LOG_CHANNEL_ID", "-1004333103786"))
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
 log = logging.getLogger("tiktok_bot")

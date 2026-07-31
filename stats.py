@@ -359,7 +359,9 @@ def _admin_stats_text(mode: str) -> str:
         f"├ За период: <b>{bans_total}</b>\n"
         f"└ Активных сейчас: <b>{active_bans}</b>\n\n"
         f"⭐ <b>Звёзды (донаты)</b>\n"
-        f"└ За период: <b>{stars_total} ⭐</b>\n"
+        f"└ За период: <b>{stars_total} ⭐</b>\n\n"
+        f"🎁 <b>Реферальная система</b>\n"
+        f"└ Приглашено всего: <b>{store.total_referrals_count()}</b>\n"
     )
     if mode == "all":
         text_parts.append(
