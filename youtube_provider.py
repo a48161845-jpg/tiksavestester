@@ -48,12 +48,12 @@ async def download_youtube(
     def _run() -> Path:
         out_template = str(out_dir / "%(id)s.%(ext)s")
         opts = {
-            "format": (
-                f"bestvideo[ext=mp4][height<={max_height}]+bestaudio[ext=m4a]/"
-                f"best[ext=mp4][height<={max_height}]/best[height<={max_height}]/best"
-            ),
+            # ВАЖНО: никаких "bestvideo+bestaudio" — склейка отдельных
+            # видео/аудио-потоков требует ffmpeg, а его на сервере нет.
+            # Берём только уже смешанные (video+audio в одном файле) форматы —
+            # yt-dlp отдаёт их как есть, без пост-обработки.
+            "format": f"best[ext=mp4][height<={max_height}]/best[height<={max_height}]/best",
             "outtmpl": out_template,
-            "merge_output_format": "mp4",
             "noplaylist": True,
             "quiet": True,
             "no_warnings": True,
