@@ -62,7 +62,7 @@ YOUTUBE_MAX_HEIGHT = int(os.getenv("YOUTUBE_MAX_HEIGHT", "1920"))
 # нужно больше — единственный вариант — поднять свой локальный Bot API
 # сервер (тогда лимит вырастает до ~2 ГБ), это уже инфраструктурное решение,
 # не просто смена цифры в .env.
-YOUTUBE_MAX_VIDEO_MB = int(os.getenv("YOUTUBE_MAX_VIDEO_MB", "49"))
+YOUTUBE_MAX_VIDEO_MB = int(os.getenv("YOUTUBE_MAX_VIDEO_MB", "100000"))
 YOUTUBE_MAX_VIDEO_BYTES = YOUTUBE_MAX_VIDEO_MB * 1024 * 1024
 
 MEDIA_GROUP_LIMIT = 10
