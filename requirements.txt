@@ -3,3 +3,4 @@ aiohttp>=3.14.1
 python-dotenv>=1.2.2
 asyncpg>=0.29.0
 yt-dlp>=2025.6.9
+imageio-ffmpeg>=0.5.1

@@ -7,8 +7,9 @@
 (asyncio.to_thread), чтобы не блокировать event loop бота.
 """
 import asyncio
+import shutil
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import yt_dlp
 
@@ -17,6 +18,26 @@ from config import YOUTUBE_MAX_HEIGHT
 
 class YoutubeTooLargeError(Exception):
     """Итоговый файл больше допустимого лимита."""
+
+
+def _find_ffmpeg() -> Optional[str]:
+    """
+    Ищет ffmpeg: сначала системный (если вдруг есть), потом — портативный
+    бинарник из пакета imageio-ffmpeg (ставится через pip, ничего вручную
+    в систему устанавливать не нужно — именно так чинили отсутствие ffmpeg
+    на этом сервере).
+    """
+    system_path = shutil.which("ffmpeg")
+    if system_path:
+        return system_path
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return None
+
+
+_FFMPEG_PATH: Optional[str] = _find_ffmpeg()
 
 
 def _probe_sync(url: str) -> Dict[str, Any]:
@@ -47,12 +68,23 @@ async def download_youtube(
 
     def _run() -> Path:
         out_template = str(out_dir / "%(id)s.%(ext)s")
+
+        if _FFMPEG_PATH:
+            # ffmpeg есть (системный или портативный из imageio-ffmpeg) —
+            # можно склеивать отдельные видео/аудио-потоки, это даёт заметно
+            # лучшее качество (особенно для вертикальных Shorts, где хорошие
+            # потоки почти всегда раздельные, а не в одном файле).
+            fmt = (
+                f"bestvideo[height<={max_height}]+bestaudio/"
+                f"best[height<={max_height}]/best"
+            )
+        else:
+            # ffmpeg не нашёлся вообще нигде — склейка невозможна, берём
+            # только уже готовые (video+audio в одном файле) форматы.
+            fmt = f"best[ext=mp4][height<={max_height}]/best[height<={max_height}]/best"
+
         opts = {
-            # ВАЖНО: никаких "bestvideo+bestaudio" — склейка отдельных
-            # видео/аудио-потоков требует ffmpeg, а его на сервере нет.
-            # Берём только уже смешанные (video+audio в одном файле) форматы —
-            # yt-dlp отдаёт их как есть, без пост-обработки.
-            "format": f"best[ext=mp4][height<={max_height}]/best[height<={max_height}]/best",
+            "format": fmt,
             "outtmpl": out_template,
             "noplaylist": True,
             "quiet": True,
@@ -61,6 +93,10 @@ async def download_youtube(
             "socket_timeout": 20,
             "retries": 3,
         }
+        if _FFMPEG_PATH:
+            opts["merge_output_format"] = "mp4"
+            opts["ffmpeg_location"] = _FFMPEG_PATH
+
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=True)
             info_holder.update(info or {})
