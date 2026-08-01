@@ -12,7 +12,6 @@ from user_label import resolve_user_label
 from gates import gate_message
 from logging_channel import log_event, log_admin_action_to_channel, format_user_for_log
 from admin_log_file import log_admin
-from referral import top_referrers_text
 from keyboards import (
     START_TEXT,
     HELP_TEXT,
@@ -220,10 +219,6 @@ async def top_cmd(message: Message):
         return
 
     parts_all = (message.text or "").split()
-
-    if len(parts_all) >= 2 and parts_all[1].strip().lower() in {"ref", "реф", "referral", "referrals"}:
-        await message.answer(top_referrers_text(), parse_mode="HTML")
-        return
 
     if len(parts_all) >= 3:
         d1 = parse_date_token(parts_all[1])
