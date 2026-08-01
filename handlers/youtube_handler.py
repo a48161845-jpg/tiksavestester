@@ -17,8 +17,8 @@ from aiogram.types import Message, FSInputFile
 from globals_state import dp
 from config import (
     MSG_DL,
-    MAX_VIDEO_BYTES,
-    MAX_VIDEO_MB,
+    YOUTUBE_MAX_VIDEO_BYTES,
+    YOUTUBE_MAX_VIDEO_MB,
     YOUTUBE_MAX_DURATION_SEC,
     REF_POINTS_PER_REFERRAL,
 )
@@ -129,9 +129,9 @@ async def youtube_handler(message: Message):
                 with contextlib.suppress(Exception):
                     await status.edit_text("❌ Скачанный файл пустой. Попробуй ещё раз.")
                 return
-            if size > MAX_VIDEO_BYTES:
+            if size > YOUTUBE_MAX_VIDEO_BYTES:
                 with contextlib.suppress(Exception):
-                    await status.edit_text(f"❌ Файл больше лимита ({MAX_VIDEO_MB} МБ). Это видео слишком тяжёлое.")
+                    await status.edit_text(f"❌ Файл больше лимита ({YOUTUBE_MAX_VIDEO_MB} МБ). Это видео слишком тяжёлое.")
                 return
 
             title = str(dl_info.get("title") or info.get("title") or "YouTube")
@@ -140,7 +140,16 @@ async def youtube_handler(message: Message):
             with contextlib.suppress(Exception):
                 await status.edit_text("📤 Отправляю…")
 
-            await message.answer_video(FSInputFile(tmp_path), caption=caption, parse_mode="HTML")
+            try:
+                await message.answer_video(FSInputFile(tmp_path), caption=caption, parse_mode="HTML")
+            except Exception as e:
+                await _log_yt_err(message.bot, "send", uid, label, url, e)
+                with contextlib.suppress(Exception):
+                    await status.edit_text(
+                        "❌ Telegram отклонил файл — скорее всего, он слишком большой "
+                        "для отправки ботом (обычный лимит Telegram — 50 МБ на файл)."
+                    )
+                return
 
             store.inc_download(uid, "video", items=1)
             await _reward_referral_if_first_download(message.bot, uid, label)
