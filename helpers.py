@@ -15,6 +15,10 @@ from config import MSK_TZ, TIKTOK_RE, YOUTUBE_RE, ADMINS
 def html_escape(s: str) -> str:
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
+def plain(s: str) -> str:
+    """Убирает HTML-теги — для мест, где разметка не поддерживается (алерты callback.answer)."""
+    return re.sub(r"<[^>]+>", "", s or "")
+
 def code(s: Any) -> str:
     return f"<code>{html_escape(str(s))}</code>"
 

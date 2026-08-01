@@ -16,6 +16,8 @@ from storage import store
 pending_gift_purchase: Dict[int, str] = {}
 PENDING_GIFT_TTL_SEC = 300
 
+DIVIDER = "━━━━━━━━━━━━━━━━━━━━"
+
 
 def ref_link(uid: int) -> str:
     return f"https://t.me/{BOT_USERNAME}?start={uid}"
@@ -28,13 +30,15 @@ def gift_by_key(key: str) -> Optional[dict]:
 def ref_menu_text(uid: int) -> str:
     rs = store.get_ref_stats(uid)
     return (
-        "🎁 <b>Реферальная система Tiksaves</b>\n\n"
-        f"👥 Твои рефералы:\n<b>{rs['referrals_count']}</b>\n\n"
-        f"🎟 Баланс:\n<b>{rs['ref_points']} баллов</b>\n\n"
-        "Приглашай друзей и получай баллы!\n\n"
-        f"За каждого активного пользователя:\n+{REF_POINTS_PER_REFERRAL} 🎟\n\n"
-        "Твоя ссылка:\n"
-        f"🔗 t.me/{BOT_USERNAME}?start={uid}"
+        "🎁 <b>Реферальная система TikSaves</b>\n"
+        f"{DIVIDER}\n\n"
+        f"👥 Приглашено друзей: <b>{rs['referrals_count']}</b>\n"
+        f"🎟 Баланс: <b>{rs['ref_points']}</b> баллов\n\n"
+        "Зови друзей и копи баллы на подарки — просто скидывай свою ссылку 👇\n\n"
+        f"💎 За каждого активного друга: <b>+{REF_POINTS_PER_REFERRAL} 🎟</b>\n"
+        "<i>(баллы начисляются, как только друг скачает своё первое видео)</i>\n\n"
+        "🔗 <b>Твоя ссылка:</b>\n"
+        f"<code>t.me/{BOT_USERNAME}?start={uid}</code>"
     )
 
 
@@ -52,99 +56,108 @@ def _gifts_grouped_by_price() -> List[tuple]:
 
 def gift_shop_text(uid: int) -> str:
     rs = store.get_ref_stats(uid)
-    lines = ["🎁 <b>Магазин подарков</b>\n", f"Твой баланс:\n🎟 <b>{rs['ref_points']}</b>\n", "Выбери подарок:\n"]
+    lines = [
+        "🎁 <b>Магазин подарков</b>",
+        f"{DIVIDER}\n",
+        f"🎟 Твой баланс: <b>{rs['ref_points']}</b>\n",
+        "Выбирай подарок — жми кнопку ниже 👇\n",
+    ]
     for price, gifts in _gifts_grouped_by_price():
-        for g in gifts:
-            lines.append(f"{g['emoji']} {html_escape(g['name'])}")
-        lines.append(f"<b>{price} 🎟</b>\n")
+        names = "  •  ".join(f"{g['emoji']} {html_escape(g['name'])}" for g in gifts)
+        lines.append(f"<b>{price} 🎟</b>\n{names}\n")
     return "\n".join(lines)
 
 
 def gift_confirm_text(gift: dict) -> str:
     return (
-        "🎁 <b>Подтверждение покупки</b>\n\n"
-        f"Подарок:\n{gift['emoji']} {html_escape(gift['name'])}\n\n"
-        f"Стоимость:\n🎟 {gift['price']}\n\n"
-        "После подтверждения баллы будут списаны.\n"
-        "Подарок будет выдан вручную администрацией.\n\n"
-        "Продолжить?"
+        "🧾 <b>Подтверждение покупки</b>\n"
+        f"{DIVIDER}\n\n"
+        f"🎁 Подарок: {gift['emoji']} <b>{html_escape(gift['name'])}</b>\n"
+        f"🎟 Стоимость: <b>{gift['price']}</b> баллов\n\n"
+        "После подтверждения баллы спишутся, а заявку обработает администрация вручную.\n\n"
+        "Продолжаем? 👇"
     )
 
 
 def gift_created_text(gift: dict) -> str:
     return (
-        "✅ <b>Заявка создана!</b>\n\n"
-        f"🎁 Подарок:\n{gift['emoji']} {html_escape(gift['name'])}\n\n"
-        f"🎟 Списано:\n{gift['price']} баллов\n\n"
-        "Статус:\n⏳ Ожидает выдачи\n\n"
+        "✅ <b>Заявка создана!</b>\n"
+        f"{DIVIDER}\n\n"
+        f"🎁 Подарок: {gift['emoji']} <b>{html_escape(gift['name'])}</b>\n"
+        f"🎟 Списано: <b>{gift['price']}</b> баллов\n"
+        "📌 Статус: <b>⏳ ожидает выдачи</b>\n\n"
         "Администратор скоро обработает заявку.\n"
-        "Спасибо за развитие Tiksaves ❤️"
+        "Спасибо, что помогаешь развивать TikSaves ❤️"
     )
 
 
 _STATUS_LABELS = {
     "pending": "⏳ Ожидает выдачи",
     "completed": "✅ Выдан",
-    "rejected": "❌ Отменён",
+    "rejected": "❌ Отклонён",
 }
 
 
 def my_requests_text(uid: int) -> str:
     reqs = store.user_gift_requests(uid)
     if not reqs:
-        return "📦 <b>История заявок</b>\n\nПока пусто — загляни в 🎁 Магазин подарков!"
-    lines = ["📦 <b>История заявок</b>\n"]
+        return (
+            "📦 <b>История заявок</b>\n"
+            f"{DIVIDER}\n\n"
+            "Пока пусто — загляни в 🎁 Магазин подарков и выбери что-нибудь!"
+        )
+    lines = ["📦 <b>История заявок</b>", f"{DIVIDER}\n"]
     for i, r in enumerate(reqs, start=1):
         g = gift_by_key(r.get("gift_key", "")) or {}
         emoji = g.get("emoji", "🎁")
         name = r.get("gift_name") or g.get("name", "?")
         status = _STATUS_LABELS.get(r.get("status", ""), str(r.get("status", "?")))
-        lines.append(f"{i}.\n{emoji} {html_escape(name)}\n{status}\n")
+        lines.append(f"<b>{i}.</b> {emoji} {html_escape(name)} — {status}")
     return "\n".join(lines)
 
 
 def top_referrers_text(uid: Optional[int] = None, *, limit: Optional[int] = None) -> str:
     top = store.top_referrers(limit or REF_TOP_LIMIT)
     medals = ["🥇", "🥈", "🥉"]
-    lines = ["🏆 <b>Топ рефереров Tiksaves</b>\n"]
+    lines = ["🏆 <b>Топ рефереров TikSaves</b>", f"{DIVIDER}\n"]
     if not top:
-        lines.append("Пока никто не пригласил ни одного реферала.\n")
+        lines.append("Пока никто не пригласил ни одного друга — стань первым! 🚀")
     for i, (ref_uid, cnt) in enumerate(top):
-        medal = medals[i] if i < 3 else f"{i + 1}."
+        medal = medals[i] if i < 3 else f"<b>{i + 1}.</b>"
         label = store.get_user_label(ref_uid)
-        lines.append(f"{medal} {html_escape(label)}\n👥 {cnt} рефералов\n")
+        lines.append(f"{medal} {html_escape(label)} — 👥 <b>{cnt}</b>")
 
     if uid is None:
         return "\n".join(lines).rstrip()
 
     rank = store.ref_rank(uid)
     rs = store.get_ref_stats(uid)
-    lines.append("Твоё место:")
+    lines.append("")
     if rank:
-        lines.append(f"#{rank}\n👥 {rs['referrals_count']} рефералов")
+        lines.append(f"📍 <b>Твоё место:</b> #{rank} — 👥 {rs['referrals_count']} рефералов")
     else:
-        lines.append(f"— пока нет рефералов\n👥 {rs['referrals_count']} рефералов")
+        lines.append(f"📍 <b>Твоё место:</b> пока нет рефералов (у тебя {rs['referrals_count']})")
     return "\n".join(lines)
 
 
 HOW_IT_WORKS_TEXT = (
-    "📖 <b>Реферальная система</b>\n\n"
-    "1️⃣ Получи свою ссылку в /ref\n\n"
-    "2️⃣ Приглашай друзей\n\n"
-    "3️⃣ За каждого активного пользователя получай:\n"
-    f"+{REF_POINTS_PER_REFERRAL} 🎟\n\n"
-    "4️⃣ Обменивай баллы на Telegram-подарки\n\n"
-    "🎁 Выдача подарков производится вручную администрацией."
+    "📖 <b>Как работает реферальная система</b>\n"
+    f"{DIVIDER}\n\n"
+    "1️⃣ Забери свою ссылку в /ref\n"
+    "2️⃣ Отправь её друзьям\n"
+    "3️⃣ Как только друг скачает первое видео — тебе:\n"
+    f"    💎 <b>+{REF_POINTS_PER_REFERRAL} 🎟</b>\n"
+    "4️⃣ Копи баллы и меняй их на подарки в магазине 🎁\n\n"
+    "✋ Подарки выдаются вручную администрацией — обычно быстро."
 )
 
 
 def new_referral_notify_text(new_user_label: str, rs: Dict[str, int]) -> str:
     return (
-        "🎉 <b>Новый реферал!</b>\n\n"
-        f"👤 Пользователь:\n{html_escape(new_user_label)}\n\n"
-        "перешёл по твоей ссылке и запустил Tiksaves!\n\n"
-        f"+{REF_POINTS_PER_REFERRAL} 🎟 начислено\n\n"
-        "Твой результат:\n\n"
-        f"👥 Рефералы: {rs['referrals_count']}\n"
-        f"🎟 Баланс: {rs['ref_points']}"
+        "🎉 <b>Новый реферал!</b>\n"
+        f"{DIVIDER}\n\n"
+        f"👤 {html_escape(new_user_label)} перешёл по твоей ссылке и скачал своё первое видео!\n\n"
+        f"💎 Начислено: <b>+{REF_POINTS_PER_REFERRAL} 🎟</b>\n\n"
+        f"👥 Всего рефералов: <b>{rs['referrals_count']}</b>\n"
+        f"🎟 Баланс: <b>{rs['ref_points']}</b>"
     )

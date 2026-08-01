@@ -24,22 +24,30 @@ pending_admin_broadcast_cancel: Dict[int, bool] = {}
 
 # ================== PRESET TEXTS ==================
 REMINDER_MSG = (
-    "**Напоминание** 📌\n\n"
-    "**🆘 Поддержка**\n"
-    "Если есть вопрос или проблема - команда **/support** подскажет, куда писать.\n"
-    "Также можно писать напрямую: **@tiksavesbotsupport**\n\n"
-    "**💛 Донат**\n"
-    "Команда **/donate** - если бот помогает, можно поддержать развитие:\n\n"
-    "• ⭐️ донат через **Telegram Stars**\n"
-    "• 💲 донат **криптой**\n\n"
-    "*Спасибо, что пользуетесь ботом 🙌*"
+    "📌 **На всякий случай, напоминаем** \n\n"
+    "**🆘 Что-то не работает?**\n"
+    "Команда **/support** покажет, куда писать — или сразу пиши: **@tiksavesbotsupport**\n\n"
+    "**💛 Нравится бот?**\n"
+    "Команда **/donate** — если он помогает, поддержка через Stars ⭐️ или крипту 💲 реально важна для нас.\n\n"
+    "*Спасибо, что ты с нами 🙌*"
+)
+
+REFERRAL_REMINDER_MSG = (
+    "🎁 **А ты знал про подарки?** \n\n"
+    "Приглашай друзей в TikSaves и копи баллы на реальные Telegram-подарки — сердечки, розы, кольца и даже алмазы 💎\n\n"
+    "**Как это работает:**\n"
+    "1️⃣ Забери свою ссылку — команда **/ref**\n"
+    "2️⃣ Скинь её другу\n"
+    "3️⃣ Как только он скачает первое видео — тебе баллы 🎟\n\n"
+    "Там же — магазин подарков, твои заявки и топ рефереров.\n"
+    "*Заходи в /ref прямо сейчас* 👀"
 )
 
 ADVERTISEMENT_MSG = (
-    "Друзья, привет! 😄\n\n"
-    "Наш бот помогает скачивать контент из TikTok 🎬 без лишних подписок и каналов.\n\n"
-    "Если вам нравится - расскажите друзьям и знакомым. Это реально помогает проекту.\n"
-    "Спасибо! Команда TIKSAVES 💛"
+    "😄 **Привет, друзья!**\n\n"
+    "TikSaves скачивает видео, фото-слайдшоу и музыку из TikTok — без водяных знаков, подписок и лишних каналов. А ещё умеет YouTube 🎬\n\n"
+    "Если бот полезен — расскажи о нём друзьям, это реально помогает проекту расти 🚀\n\n"
+    "*Спасибо! Команда TikSaves* 💛"
 )
 
 
@@ -176,12 +184,15 @@ def _broadcast_state() -> Dict[str, str]:
 
 
 async def broadcast_schedule_loop(bot: Bot) -> None:
-    # Напоминание — раз в неделю (в 15:00); реклама бота — раз в 4 дня (в 20:00)
+    # Напоминание — раз в неделю (в 15:00); напоминание про рефералку — раз в
+    # неделю, но в другой день и час (17:00, сдвиг на 3 дня от основного,
+    # чтобы не слать два сообщения в один день); реклама бота — раз в 4 дня (в 20:00)
     while True:
         try:
             now = msk_now()
             today_str = now.strftime("%Y-%m-%d")
             week_mod = now.date().toordinal() % 7
+            ref_week_mod = (now.date().toordinal() - 3) % 7
             day_mod = now.date().toordinal() % 4
             state = _broadcast_state()
 
@@ -192,6 +203,13 @@ async def broadcast_schedule_loop(bot: Bot) -> None:
                     store._mark_dirty()
                     log.info("broadcast: reminder sent at 15:00 (weekly cycle)")
 
+            if now.hour == 17 and now.minute == 0 and ref_week_mod == 0:
+                if state.get("last_ref_reminder") != today_str:
+                    await do_broadcast_system(bot, "ref_reminder", REFERRAL_REMINDER_MSG)
+                    state["last_ref_reminder"] = today_str
+                    store._mark_dirty()
+                    log.info("broadcast: referral reminder sent at 17:00 (weekly cycle)")
+
             if now.hour == 20 and now.minute == 0 and day_mod == 0:
                 if state.get("last_advert") != today_str:
                     await do_broadcast_system(bot, "advert", ADVERTISEMENT_MSG)
@@ -199,7 +217,7 @@ async def broadcast_schedule_loop(bot: Bot) -> None:
                     store._mark_dirty()
                     log.info("broadcast: advert sent at 20:00 (4-day cycle)")
 
-            # Спим до следующей минуты, чтобы не пропустить 15:00 / 20:00
+            # Спим до следующей минуты, чтобы не пропустить 15:00 / 17:00 / 20:00
             next_minute = now.replace(second=0, microsecond=0) + timedelta(minutes=1)
             wait_sec = (next_minute - now).total_seconds()
             await asyncio.sleep(max(1, min(60, wait_sec)))

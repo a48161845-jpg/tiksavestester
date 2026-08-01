@@ -7,7 +7,7 @@ import time
 from aiogram.types import Message, CallbackQuery
 
 from config import MSG_SPAM, BAN_REASON_SPAM, log
-from helpers import html_escape, is_admin, is_chatty_message
+from helpers import html_escape, plain, is_admin, is_chatty_message
 from storage import store
 from limiters import lim
 from logging_channel import log_event, format_user_for_log
@@ -108,5 +108,5 @@ async def gate_callback(call: CallbackQuery, label: str) -> bool:
             return False
 
     log.info("gate_callback: spam limit uid=%s wait=%s data=%s", uid, wait, data[:50] if data else "")
-    await call.answer(MSG_SPAM.format(n=wait), show_alert=True)
+    await call.answer(plain(MSG_SPAM.format(n=wait)), show_alert=True)
     return False

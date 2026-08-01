@@ -373,6 +373,17 @@ def _admin_stats_text(mode: str) -> str:
         )
     return "".join(text_parts)
 
+def _top_referrals_section() -> str:
+    top = store.top_referrers(3)
+    if not top:
+        return "🎁 <b>Топ рефереров</b>\n-"
+    lines = []
+    for uid, cnt in top:
+        who = store.get_user_label(uid)
+        lines.append(f"• <b>{format_user_for_log(who, uid)}</b>: 👥 <b>{cnt}</b> реф.")
+    return "🎁 <b>Топ рефереров</b>\n" + "\n".join(lines)
+
+
 def _top_text_from_totals(title: str, totals: Dict[int, Dict[str, int]]) -> str:
     def top_by(field: str) -> List[Tuple[int, int]]:
         return sorted(
@@ -400,7 +411,8 @@ def _top_text_from_totals(title: str, totals: Dict[int, Dict[str, int]]) -> str:
         f"{title}\n\n"
         f"⭐ <b>Топ Stars</b>\n{fmt_list(top_stars, '⭐', '⭐')}\n\n"
         f"🎬 <b>Топ видео</b>\n{fmt_list(top_video, '🎬', 'шт')}\n\n"
-        f"🖼️ <b>Топ фото</b>\n{fmt_list(top_photo, '🖼️', 'шт')}\n"
+        f"🖼️ <b>Топ фото</b>\n{fmt_list(top_photo, '🖼️', 'шт')}\n\n"
+        f"{_top_referrals_section()}"
     )
 
 def _top_text_for_mode(mode: str) -> str:
