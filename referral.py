@@ -6,6 +6,7 @@
 и handlers/referral_callbacks.py. Подарки выдаются вручную администрацией —
 бот только ведёт учёт баллов, рефералов и заявок.
 """
+import contextlib
 from typing import Dict, List, Optional
 
 from config import BOT_USERNAME, GIFTS, GIFTS_BY_KEY, REF_POINTS_PER_REFERRAL, REF_TOP_LIMIT
@@ -161,3 +162,23 @@ def new_referral_notify_text(new_user_label: str, rs: Dict[str, int]) -> str:
         f"👥 Всего рефералов: <b>{rs['referrals_count']}</b>\n"
         f"🎟 Баланс: <b>{rs['ref_points']}</b>"
     )
+
+
+async def reward_referral_if_first_download(bot, uid: int, label: str) -> None:
+    """
+    Начисляет баллы пригласившему — только один раз, при первом успешном
+    скачивании uid (не при простом /start). Общая логика для всех источников
+    (TikTok/YouTube/Instagram/VK/Pinterest) — раньше дублировалась в каждом
+    хендлере отдельно.
+    """
+    reward = store.try_reward_referral(uid, REF_POINTS_PER_REFERRAL)
+    if not reward:
+        return
+    with contextlib.suppress(Exception):
+        await bot.send_message(
+            reward["referrer_id"],
+            new_referral_notify_text(
+                label, {"referrals_count": reward["referrals_count"], "ref_points": reward["ref_points"]}
+            ),
+            parse_mode="HTML",
+        )

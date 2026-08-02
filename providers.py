@@ -25,7 +25,7 @@ from config import (
     API_ERROR_THRESHOLD,
     API_FALLBACK_COOLDOWN_SEC,
 )
-from helpers import html_escape, code, clamp_reason, ms_since, exc_type_name, resolve_tiktok_redirect, normalize_tiktok_url
+from helpers import html_escape, code, clamp_reason, ms_since, exc_type_name, resolve_tiktok_redirect, normalize_tiktok_url, normalize_description as _normalize_description
 from storage import store
 from logging_channel import log_event
 
@@ -106,34 +106,6 @@ def _deep_find_list(data: Any, keys: List[str], _depth: int = 0) -> List[str]:
             if r:
                 return r
     return []
-
-
-_TAG_GLUE_RE = re.compile(r"(?<=\S)(?=[#@])")
-_MULTI_SPACE_RE = re.compile(r"[ \t]{2,}")
-_TRAILING_TAGS_RE = re.compile(r"[ \t]+((?:[#@]\S+[ \t]*){2,})$")
-
-
-def _normalize_description(text: Optional[str]) -> Optional[str]:
-    """
-    API-скрейперы (tikwm и подобные) иногда отдают описание видео с хэштегами,
-    склеенными друг с другом и с текстом без пробелов — "текст#тег1#тег2"
-    вместо "текст #тег1 #тег2", как это выглядит в самом TikTok. Расклеиваем:
-    вставляем пробел перед каждым "#"/"@", если перед ним нет пробела, и
-    схлопываем случайные повторные пробелы (переносы строк не трогаем).
-
-    Дополнительно: если в конце описания идёт "хвост" из 2+ хэштегов/упоминаний
-    подряд (частый паттерн — основной текст, потом блок тегов), отделяем его
-    пустой строкой от текста, как обычно и выглядит в самом приложении TikTok,
-    а не одной слипшейся кучей.
-    """
-    if not text:
-        return text
-    t = _TAG_GLUE_RE.sub(" ", text)
-    t = _MULTI_SPACE_RE.sub(" ", t)
-    m = _TRAILING_TAGS_RE.search(t)
-    if m:
-        t = t[: m.start()] + "\n\n" + m.group(1).strip()
-    return t.strip()
 
 
 class BaseProvider:

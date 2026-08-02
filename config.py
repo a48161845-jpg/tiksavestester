@@ -55,7 +55,7 @@ YOUTUBE_RE = re.compile(
 # площадок (закрытые профили/приватные посты без авторизации не скачать),
 # а не бота.
 INSTAGRAM_RE = re.compile(r"(https?://)?(www\.)?instagram\.com/(reel|reels|p|tv)/", re.I)
-VK_RE = re.compile(r"(https?://)?(www\.|m\.)?(vk\.com|vkvideo\.ru)/(video|clip)", re.I)
+VK_RE = re.compile(r"(https?://)?(www\.|m\.)?(vk\.com|vk\.ru|vkvideo\.ru)/(video|clip)", re.I)
 PINTEREST_RE = re.compile(r"(https?://)?(www\.)?(pinterest\.[a-z.]+/pin/|pin\.it/)", re.I)
 
 YOUTUBE_MAX_DURATION_SEC = int(os.getenv("YOUTUBE_MAX_DURATION_SEC", "1800"))  # 30 минут

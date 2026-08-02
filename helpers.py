@@ -19,6 +19,31 @@ def plain(s: str) -> str:
     """Убирает HTML-теги — для мест, где разметка не поддерживается (алерты callback.answer)."""
     return re.sub(r"<[^>]+>", "", s or "")
 
+_TAG_GLUE_RE = re.compile(r"(?<=\S)(?=[#@])")
+_MULTI_SPACE_RE = re.compile(r"[ \t]{2,}")
+_TRAILING_TAGS_RE = re.compile(r"[ \t]+((?:[#@]\S+[ \t]*){2,})$")
+
+def normalize_description(text: Optional[str]) -> Optional[str]:
+    """
+    Скрейперы/API (tikwm, yt-dlp и т.п.) иногда отдают описание с хэштегами,
+    склеенными друг с другом и с текстом без пробелов — "текст#тег1#тег2"
+    вместо "текст #тег1 #тег2". Расклеиваем: вставляем пробел перед каждым
+    "#"/"@", если перед ним нет пробела, и схлопываем случайные повторные
+    пробелы (переносы строк не трогаем).
+
+    Дополнительно: если в конце описания идёт "хвост" из 2+ хэштегов/упоминаний
+    подряд (частый паттерн — основной текст, потом блок тегов), отделяем его
+    пустой строкой от текста, как обычно и выглядит в самих приложениях.
+    """
+    if not text:
+        return text
+    t = _TAG_GLUE_RE.sub(" ", text)
+    t = _MULTI_SPACE_RE.sub(" ", t)
+    m = _TRAILING_TAGS_RE.search(t)
+    if m:
+        t = t[: m.start()] + "\n\n" + m.group(1).strip()
+    return t.strip()
+
 def code(s: Any) -> str:
     return f"<code>{html_escape(str(s))}</code>"
 
