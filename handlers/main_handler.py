@@ -95,7 +95,7 @@ async def main_handler(message: Message, client: TikWMClient, switcher: Provider
     if url:
         url = normalize_tiktok_url(url)
     if not url and not text.startswith("/"):
-        await message.answer("📎 Пришли ссылку на TikTok или YouTube.")
+        await message.answer("📎 Пришли ссылку на TikTok, YouTube, Instagram, VK или Pinterest.")
         return
 
     if text.startswith("/"):
