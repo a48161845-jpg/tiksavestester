@@ -112,3 +112,10 @@ async def download_youtube(
 
     path = await asyncio.to_thread(_run)
     return path, info_holder
+
+
+# Эти функции на самом деле не привязаны к YouTube — просто вызывают
+# yt-dlp.extract_info(url), который сам определяет площадку. Алиасы с
+# нейтральными именами — для использования с Instagram/VK/Pinterest и т.п.
+probe_media = probe_youtube
+download_media = download_youtube

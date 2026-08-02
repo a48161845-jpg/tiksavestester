@@ -9,7 +9,7 @@ from typing import Optional, Dict, Any, List
 import aiohttp
 from datetime import datetime, timezone, timedelta
 
-from config import MSK_TZ, TIKTOK_RE, YOUTUBE_RE, ADMINS
+from config import MSK_TZ, TIKTOK_RE, YOUTUBE_RE, INSTAGRAM_RE, VK_RE, PINTEREST_RE, ADMINS
 
 # ================== HTML FORMATTING ==================
 def html_escape(s: str) -> str:
@@ -202,6 +202,35 @@ def normalize_youtube_url(url: str) -> str:
     # В отличие от TikTok, у YouTube query-параметры значимы (?v=ID) —
     # обрезать их нельзя, поэтому просто возвращаем как есть после очистки.
     return u
+
+def is_instagram(text: str) -> bool:
+    return bool(INSTAGRAM_RE.search(text or ""))
+
+def is_vk(text: str) -> bool:
+    return bool(VK_RE.search(text or ""))
+
+def is_pinterest(text: str) -> bool:
+    return bool(PINTEREST_RE.search(text or ""))
+
+def is_other_source(text: str) -> bool:
+    """Instagram / VK / Pinterest — всё, что скачивается через тот же движок, что и YouTube."""
+    return is_instagram(text) or is_vk(text) or is_pinterest(text)
+
+def extract_other_source_url(text: str) -> Optional[str]:
+    if not text:
+        return None
+    m = re.search(r"https?://\S+", text)
+    if m:
+        url = m.group(0)
+        return url if is_other_source(url) else None
+    for rx in (INSTAGRAM_RE, VK_RE, PINTEREST_RE):
+        m2 = rx.search(text)
+        if m2:
+            url = text[m2.start():].split()[0]
+            if not url.startswith("http"):
+                url = "https://" + url
+            return url
+    return None
 
 async def resolve_tiktok_redirect(session: aiohttp.ClientSession, url: str) -> str:
     headers = {"User-Agent": "Mozilla/5.0", "Accept": "*/*"}

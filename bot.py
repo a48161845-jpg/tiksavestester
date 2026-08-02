@@ -76,7 +76,7 @@ async def main():
                 bot,
                 "🚀 <b>Бот запущен</b>\n"
                 f"🤖 Бот: @{me.username} (<code>{me.id}</code>)\n"
-                f"👥 Пользователей в базе: <b>{len(store.data.get('users', []))}</b>\n"
+                f"👥 Пользователей в базе: <b>{store.get_users_count()}</b>\n"
                 f"👑 Администраторов: <b>{admins_total}</b>\n"
                 f"🚫 Активных банов: <b>{bans_active}</b>\n"
                 f"📡 Провайдер(ы): <b>{provider_line}</b>\n"
@@ -107,7 +107,7 @@ async def main():
                     "🛑 <b>Бот остановлен</b>\n"
                     f"{shutdown_reason}\n"
                     f"⏳ Время работы: <b>{uptime_str}</b>\n"
-                    f"👥 Пользователей в базе: <b>{len(store.data.get('users', []))}</b>\n"
+                    f"👥 Пользователей в базе: <b>{store.get_users_count()}</b>\n"
                     f"🕒 Время остановки: {now_msk_str()}",
                 )
 

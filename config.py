@@ -49,6 +49,15 @@ TIKTOK_RE = re.compile(r"(https?://)?(www\.)?(tiktok\.com|vm\.tiktok\.com|vt\.ti
 YOUTUBE_RE = re.compile(
     r"(https?://)?(www\.|m\.)?(youtube\.com/(watch\?|shorts/|live/)|youtu\.be/)", re.I
 )
+
+# ========= ДРУГИЕ ИСТОЧНИКИ (через тот же движок yt-dlp, что и YouTube) =========
+# Работают только с ПУБЛИЧНЫМ контентом без логина — это ограничение самих
+# площадок (закрытые профили/приватные посты без авторизации не скачать),
+# а не бота.
+INSTAGRAM_RE = re.compile(r"(https?://)?(www\.)?instagram\.com/(reel|reels|p|tv)/", re.I)
+VK_RE = re.compile(r"(https?://)?(www\.|m\.)?(vk\.com|vkvideo\.ru)/(video|clip)", re.I)
+PINTEREST_RE = re.compile(r"(https?://)?(www\.)?(pinterest\.[a-z.]+/pin/|pin\.it/)", re.I)
+
 YOUTUBE_MAX_DURATION_SEC = int(os.getenv("YOUTUBE_MAX_DURATION_SEC", "1800"))  # 30 минут
 # Для вертикальных Shorts yt-dlp репортит "height" как реальную высоту в
 # пикселях (у "1080p"-шортса это 1920, а не 1080!) — если тут стоит 720,
@@ -56,13 +65,9 @@ YOUTUBE_MAX_DURATION_SEC = int(os.getenv("YOUTUBE_MAX_DURATION_SEC", "1800"))  #
 # доставало и обычным горизонтальным видео (720/1080p), и вертикальным Shorts.
 YOUTUBE_MAX_HEIGHT = int(os.getenv("YOUTUBE_MAX_HEIGHT", "1920"))
 
-# ВАЖНО: обычный (облачный) Bot API у Telegram принимает от ботов файлы
-# ТОЛЬКО до 50 МБ — это ограничение самого Telegram, а не бота. Выше этого
-# видео физически не отправится, сколько лимит ни поднимай в конфиге. Если
-# нужно больше — единственный вариант — поднять свой локальный Bot API
-# сервер (тогда лимит вырастает до ~2 ГБ), это уже инфраструктурное решение,
-# не просто смена цифры в .env.
-YOUTUBE_MAX_VIDEO_MB = int(os.getenv("YOUTUBE_MAX_VIDEO_MB", "100000"))
+# Telegram (обычный облачный Bot API) не даёт боту отправлять файлы больше
+# 50 МБ — берём с небольшим запасом снизу.
+YOUTUBE_MAX_VIDEO_MB = int(os.getenv("YOUTUBE_MAX_VIDEO_MB", "49"))
 YOUTUBE_MAX_VIDEO_BYTES = YOUTUBE_MAX_VIDEO_MB * 1024 * 1024
 
 MEDIA_GROUP_LIMIT = 10
@@ -103,11 +108,9 @@ AUTO_SAVE_INTERVAL_SEC = 5  # автосинхронизация раз в N с�
 DESCRIPTION_TG_LIMIT = 3500
 
 # ========= VIDEO/AUDIO FALLBACK DOWNLOAD =========
-# ВАЖНО: обычный (облачный) Telegram Bot API не даёт боту отправлять файлы
-# больше 50 МБ, что бы тут ни было указано — это ограничение самого Telegram,
-# а не бота. Если это значение выставлено выше 50 — превышение сработает
-# только при self-hosted Bot API сервере (там лимит до 2000 МБ).
-MAX_VIDEO_MB = int(os.getenv("MAX_VIDEO_MB", "200"))
+# Telegram (обычный облачный Bot API) не даёт боту отправлять файлы больше
+# 50 МБ — это ограничение платформы, не бота.
+MAX_VIDEO_MB = int(os.getenv("MAX_VIDEO_MB", "49"))
 MAX_VIDEO_BYTES = MAX_VIDEO_MB * 1024 * 1024
 MAX_AUDIO_MB = int(os.getenv("MAX_AUDIO_MB", "25"))
 MAX_AUDIO_BYTES = MAX_AUDIO_MB * 1024 * 1024
