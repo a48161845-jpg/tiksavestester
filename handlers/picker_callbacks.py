@@ -24,24 +24,9 @@ from limiters import lim
 from logging_channel import log_event, format_user_for_log
 from strikes import add_download_strike
 from send_helpers import send_photos, send_music_if_any, send_description_if_any
-from referral import new_referral_notify_text
+from referral import reward_referral_if_first_download
 from picker_state import pending, cleanup_pending, picker_kb
 from keyboards import post_download_kb
-
-
-async def _reward_referral_if_first_download(bot, uid: int, label: str) -> None:
-    """Начисляет баллы пригласившему — только один раз, при первом успешном скачивании uid."""
-    reward = store.try_reward_referral(uid, REF_POINTS_PER_REFERRAL)
-    if not reward:
-        return
-    with contextlib.suppress(Exception):
-        await bot.send_message(
-            reward["referrer_id"],
-            new_referral_notify_text(
-                label, {"referrals_count": reward["referrals_count"], "ref_points": reward["ref_points"]}
-            ),
-            parse_mode="HTML",
-        )
 
 
 @dp.callback_query(F.data.startswith("pk:"))
@@ -199,7 +184,7 @@ async def picker_cb(call: CallbackQuery):
             await send_description_if_any(call.message, st.get("description"))
 
         if cnt:
-            await _reward_referral_if_first_download(call.bot, uid, label)
+            await reward_referral_if_first_download(call.bot, uid, label)
 
         await log_event(
             call.bot,
@@ -249,7 +234,7 @@ async def picker_cb(call: CallbackQuery):
             await send_description_if_any(call.message, st.get("description"))
 
         if cnt:
-            await _reward_referral_if_first_download(call.bot, uid, label)
+            await reward_referral_if_first_download(call.bot, uid, label)
             await log_event(
                 call.bot,
                 "photodl",

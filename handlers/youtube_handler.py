@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 from aiogram import F
-from aiogram.types import Message, FSInputFile
+from aiogram.types import Message
 
 from globals_state import dp
 from config import (
@@ -20,7 +20,6 @@ from config import (
     YOUTUBE_MAX_VIDEO_BYTES,
     YOUTUBE_MAX_VIDEO_MB,
     YOUTUBE_MAX_DURATION_SEC,
-    REF_POINTS_PER_REFERRAL,
 )
 from helpers import html_escape, code, clamp_reason, exc_type_name, is_youtube, extract_youtube_url, normalize_youtube_url
 from storage import store
@@ -30,21 +29,7 @@ from limiters import lim, download_sem
 from logging_channel import log_event, format_user_for_log
 from strikes import add_download_strike
 from youtube_provider import probe_youtube, download_youtube
-from referral import new_referral_notify_text
-
-
-async def _reward_referral_if_first_download(bot, uid: int, label: str) -> None:
-    reward = store.try_reward_referral(uid, REF_POINTS_PER_REFERRAL)
-    if not reward:
-        return
-    with contextlib.suppress(Exception):
-        await bot.send_message(
-            reward["referrer_id"],
-            new_referral_notify_text(
-                label, {"referrals_count": reward["referrals_count"], "ref_points": reward["ref_points"]}
-            ),
-            parse_mode="HTML",
-        )
+from external_send import send_external_video
 
 
 async def _log_yt_err(bot, stage: str, uid: int, label: str, url: str, e: Exception) -> None:
@@ -134,14 +119,11 @@ async def youtube_handler(message: Message):
                     await status.edit_text(f"❌ Файл больше лимита ({YOUTUBE_MAX_VIDEO_MB} МБ). Это видео слишком тяжёлое.")
                 return
 
-            title = str(dl_info.get("title") or info.get("title") or "YouTube")
-            caption = f"🎬 <b>{html_escape(title[:900])}</b>\n\n📥 Скачано в боте @tiksavesbot"
-
             with contextlib.suppress(Exception):
                 await status.edit_text("📤 Отправляю…")
 
             try:
-                await message.answer_video(FSInputFile(tmp_path), caption=caption, parse_mode="HTML")
+                await send_external_video(message, uid, label, tmp_path, info, dl_info, emoji="🎬")
             except Exception as e:
                 await _log_yt_err(message.bot, "send", uid, label, url, e)
                 with contextlib.suppress(Exception):
@@ -150,9 +132,6 @@ async def youtube_handler(message: Message):
                         "для отправки ботом (обычный лимит Telegram — 50 МБ на файл)."
                     )
                 return
-
-            store.inc_download(uid, "video", items=1)
-            await _reward_referral_if_first_download(message.bot, uid, label)
 
             with contextlib.suppress(Exception):
                 await status.delete()
