@@ -118,7 +118,6 @@ MAX_AUDIO_BYTES = MAX_AUDIO_MB * 1024 * 1024
 # ========= API FALLBACK / HEALTH =========
 API_ERROR_WINDOW_SEC = 120
 API_ERROR_THRESHOLD = 6
-API_FALLBACK_COOLDOWN_SEC = 180
 
 # Варианты fallback: "none" | "apify"
 ALT_PROVIDER = os.getenv("ALT_PROVIDER", "none").strip().lower()
@@ -131,8 +130,6 @@ TIKWM_COOLDOWN_SEC = float(os.getenv("TIKWM_COOLDOWN_SEC", "1.2"))
 
 BAN_DURATION_SEC = int(os.getenv("BAN_DURATION_SEC", str(24 * 3600)))  # 24 часа по умолчанию
 BAN_REASON_SPAM = "Авто-бан: спам/флуд"
-BAN_REASON_DL = "Лимит скачиваний"
-BAN_REASON_PHOTO = "Лимит фото"
 
 # Подпись с указанием бота
 CAPTION_PHOTO = (

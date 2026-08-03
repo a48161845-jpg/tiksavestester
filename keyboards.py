@@ -7,7 +7,7 @@ from typing import List
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-from config import SUPPORT_USERNAME, CRYPTO_DONATE_URL, BOT_SHARE_URL, STARS_MIN, STARS_MAX, GIFTS
+from config import SUPPORT_USERNAME, CRYPTO_DONATE_URL, BOT_SHARE_URL, STARS_MIN, STARS_MAX, GIFTS, MAX_VIDEO_MB
 from helpers import html_escape, code
 
 # ================== STATS / TOP KEYBOARDS ==================
@@ -188,7 +188,10 @@ HELP_SECTIONS = {
         "⚠️ <b>Лимиты</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
         "Слишком частые запросы придерживаются небольшим кулдауном — просто подожди пару секунд.\n"
-        "При систематическом флуде возможна временная блокировка."
+        "При систематическом флуде возможна временная блокировка.\n\n"
+        f"📦 <b>Размер файла:</b> Telegram не даёт ботам отправлять файлы тяжелее {MAX_VIDEO_MB} МБ — "
+        "это ограничение платформы, не бота. Слишком тяжёлые видео (обычно очень длинные ролики "
+        "с YouTube/VK) скачать не получится."
     ),
     "donate": (
         "💛 <b>Донат</b>\n"

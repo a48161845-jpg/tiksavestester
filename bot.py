@@ -12,7 +12,7 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
-from config import BOT_TOKEN, ALT_PROVIDER, GLOBAL_CONCURRENCY, ADMINS, log
+from config import BOT_TOKEN, ALT_PROVIDER, GLOBAL_CONCURRENCY, ADMINS
 from helpers import now_msk_str, html_escape
 from storage import store, init_db, close_db
 import globals_state
@@ -20,7 +20,7 @@ from globals_state import dp
 from providers import TikWMClient, ApifyProvider, BaseProvider, ProviderSwitcher
 from logging_channel import autosave_loop, start_log_worker, stop_log_worker, send_channel_log
 from broadcast import broadcast_schedule_loop
-from db_report import start_monthly_report, stop_monthly_report, start_pinned_overview, stop_pinned_overview
+from db_report import start_monthly_report, start_pinned_overview
 
 # Импорт регистрирует все хендлеры (@dp.message/@dp.callback_query) на dp.
 import handlers  # noqa: F401

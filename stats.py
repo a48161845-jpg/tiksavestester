@@ -12,7 +12,7 @@ from aiogram.types import Message, LinkPreviewOptions
 from helpers import html_escape, msk_now, period_keys, week_range_str, iter_day_keys, format_msk
 from storage import store
 from admin_log_file import log_admin
-from logging_channel import log_event, log_admin_action_to_channel, format_user_for_log
+from logging_channel import log_admin_action_to_channel, format_user_for_log
 from keyboards import stats_kb, top_kb
 
 
@@ -58,6 +58,27 @@ def _sum_range_bucket(day_keys: List[str]) -> Dict[str, Any]:
 
     return total
 
+_SOURCE_LABELS = {
+    "tiktok": "🎵 TikTok",
+    "youtube": "▶️ YouTube",
+    "instagram": "📸 Instagram",
+    "vk": "🔵 VK",
+    "pinterest": "📌 Pinterest",
+}
+
+
+def _fmt_by_source(by_source: Dict[str, int]) -> str:
+    if not by_source:
+        return "   -"
+    items = sorted(by_source.items(), key=lambda x: x[1], reverse=True)
+    lines = []
+    for i, (src, cnt) in enumerate(items):
+        label = _SOURCE_LABELS.get(src, src)
+        prefix = "└" if i == len(items) - 1 else "├"
+        lines.append(f"   {prefix} {label}: <b>{int(cnt)}</b>")
+    return "\n".join(lines)
+
+
 def _range_user_totals(day_keys: List[str]) -> Dict[int, Dict[str, int]]:
     mp = (store.data.get("user_stats_period", {}) or {}).get("d", {}) or {}
     totals: Dict[int, Dict[str, int]] = {}
@@ -91,6 +112,7 @@ def _admin_stats_range_text(start_dt: datetime, end_dt: datetime) -> str:
     audio_sent = int(dls.get("audio_sent", 0))
     video_ops = int(dls.get("video_ops", 0))
     photo_ops = int(dls.get("photo_ops", 0))
+    by_source = dls.get("by_source", {}) or {}
 
     errs = bucket.get("errors", {}) or {}
     err_total = int(errs.get("total", 0))
@@ -98,7 +120,7 @@ def _admin_stats_range_text(start_dt: datetime, end_dt: datetime) -> str:
     err_type = errs.get("by_type", {}) or {}
 
     bans_total = int(bucket.get("bans_total", 0))
-    active_bans = len(store.data.get("bans", {}))
+    active_bans = len(store.list_bans())
     stars_total = int(bucket.get("stars_total", 0))
 
     user_totals = _range_user_totals(day_keys)
@@ -168,7 +190,8 @@ def _admin_stats_range_text(start_dt: datetime, end_dt: datetime) -> str:
         f"├ 🎬 Видео: <b>{video_ops}</b> операций (файлов: <b>{video_sent}</b>)\n"
         f"├ 🖼️ Фото: <b>{photo_ops}</b> операций (фото: <b>{photos_sent}</b>)\n"
         f"├ 🎵 Музыка: <b>{audio_sent}</b> шт\n"
-        f"└ 📦 Итого: <b>{total_dl}</b> шт\n\n"
+        f"├ 📦 Итого: <b>{total_dl}</b> шт\n"
+        f"└ По источникам:\n{_fmt_by_source(by_source)}\n\n"
         f"💥 <b>Ошибки</b>\n"
         f"├ Всего: <b>{err_total}</b>\n"
     ]
@@ -255,6 +278,7 @@ def _admin_stats_text(mode: str) -> str:
     audio_sent = int(dls.get("audio_sent", 0))
     video_ops = int(dls.get("video_ops", 0))
     photo_ops = int(dls.get("photo_ops", 0))
+    by_source = dls.get("by_source", {}) or {}
 
     errs = bucket.get("errors", {}) or {}
     err_total = int(errs.get("total", 0))
@@ -262,7 +286,7 @@ def _admin_stats_text(mode: str) -> str:
     err_type = errs.get("by_type", {}) or {}
 
     bans_total = int(bucket.get("bans_total", 0))
-    active_bans = len(store.data.get("bans", {}))
+    active_bans = len(store.list_bans())
 
     stars_total = int(bucket.get("stars_total", 0))
 
@@ -344,7 +368,8 @@ def _admin_stats_text(mode: str) -> str:
         f"├ 🎬 Видео: <b>{video_ops}</b> операций (файлов: <b>{video_sent}</b>)\n"
         f"├ 🖼️ Фото: <b>{photo_ops}</b> операций (фото: <b>{photos_sent}</b>)\n"
         f"├ 🎵 Музыка: <b>{audio_sent}</b> шт\n"
-        f"└ 📦 Итого: <b>{total_dl}</b> шт\n\n"
+        f"├ 📦 Итого: <b>{total_dl}</b> шт\n"
+        f"└ По источникам:\n{_fmt_by_source(by_source)}\n\n"
         f"💥 <b>Ошибки</b>\n"
         f"├ Всего: <b>{err_total}</b>\n"
     ]
@@ -609,35 +634,3 @@ async def send_top_range_message(message: Message, uid: int, label: str, start_d
         await message.bot.send_chat_action(message.chat.id, "typing")
     text = _top_text_for_range(start_dt, end_dt)
     await message.answer(text, parse_mode="HTML", link_preview_options=LinkPreviewOptions(is_disabled=True), reply_markup=top_kb())
-
-
-# ================== COMPACT DAILY SUMMARY (для лог-канала) ==================
-def daily_summary_text() -> str:
-    """
-    Короткая сводка за сегодня — одно сообщение в лог-канал раз в день
-    вместо десятков отдельных событий за день.
-    """
-    keys = period_keys(msk_now())
-    bucket = (store.data.get("stats", {}).get("d", {}) or {}).get(keys["d"], {}) or {}
-
-    users_new = int(bucket.get("users_new", 0))
-    dls = bucket.get("downloads", {}) or {}
-    video_ops = int(dls.get("video_ops", 0))
-    photo_ops = int(dls.get("photo_ops", 0))
-    audio_sent = int(dls.get("audio_sent", 0))
-    errors_total = int((bucket.get("errors", {}) or {}).get("total", 0))
-    stars_total = int(bucket.get("stars_total", 0))
-    bans_total = int(bucket.get("bans_total", 0))
-    users_total = store.get_users_count()
-
-    return (
-        "📊 <b>Итоги дня</b>\n"
-        f"<i>{keys['d']}</i>\n\n"
-        f"🆕 Новых пользователей: <b>{users_new}</b> (всего: <b>{users_total}</b>)\n"
-        f"🎬 Видео: <b>{video_ops}</b>\n"
-        f"🖼️ Фото-сессий: <b>{photo_ops}</b>\n"
-        f"🎵 Музыки: <b>{audio_sent}</b>\n"
-        f"❌ Ошибок: <b>{errors_total}</b>\n"
-        f"🚫 Банов: <b>{bans_total}</b>\n"
-        f"⭐ Stars: <b>{stars_total}</b>"
-    )

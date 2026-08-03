@@ -3,7 +3,6 @@
 и резервный (Apify, опционально), а также логика переключения между ними.
 """
 import json
-import re
 import time
 import asyncio
 import contextlib
@@ -23,7 +22,6 @@ from config import (
     TIKWM_COOLDOWN_SEC,
     API_ERROR_WINDOW_SEC,
     API_ERROR_THRESHOLD,
-    API_FALLBACK_COOLDOWN_SEC,
 )
 from helpers import html_escape, code, clamp_reason, ms_since, exc_type_name, resolve_tiktok_redirect, normalize_tiktok_url, normalize_description as _normalize_description
 from storage import store

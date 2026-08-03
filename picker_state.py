@@ -14,7 +14,7 @@
 """
 import time
 import uuid
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 

@@ -13,7 +13,6 @@ from aiogram.types import Message
 from config import (
     BAN_DURATION_SEC,
     BAN_REASON_SPAM,
-    BAN_REASON_DL,
     SUPPORT_USERNAME,
 )
 from helpers import html_escape, code, format_msk

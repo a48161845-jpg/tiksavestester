@@ -8,9 +8,6 @@
 """
 import json
 import time
-import asyncio
-import logging
-from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 
 import asyncpg
@@ -273,7 +270,7 @@ class Storage:
         self._touch_seen(uid)
         return False
 
-    def inc_download(self, uid: int, kind: str, items: int = 1) -> None:
+    def inc_download(self, uid: int, kind: str, items: int = 1, source: str = "tiktok") -> None:
         from helpers import msk_now, period_keys
         now_dt = msk_now()
         keys = period_keys(now_dt)
@@ -289,6 +286,8 @@ class Storage:
             else:
                 d["photo_ops"] = int(d.get("photo_ops", 0)) + 1
                 d["photos_sent"] = int(d.get("photos_sent", 0)) + items
+            by_source = d.setdefault("by_source", {})
+            by_source[source] = int(by_source.get(source, 0)) + 1
 
         for mode, key in keys.items():
             apply_bucket(self._ensure_bucket(mode, key))

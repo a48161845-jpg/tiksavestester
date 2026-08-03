@@ -4,18 +4,15 @@
 """
 import asyncio
 import contextlib
-import io
 import json
-from datetime import datetime, timedelta
 from typing import Optional
 
 from aiogram import Bot
 from aiogram.types import BufferedInputFile
 
-from config import LOG_CHANNEL_ID, MSK_TZ, ADMINS, log
+from config import LOG_CHANNEL_ID, ADMINS, log
 from helpers import msk_now, now_msk_str
 from storage import store
-from logging_channel import send_channel_log
 
 
 def _build_report_text(title: str) -> str:
@@ -169,12 +166,6 @@ def start_monthly_report(bot: Bot) -> asyncio.Task:
     return _monthly_task
 
 
-def stop_monthly_report() -> None:
-    global _monthly_task
-    if _monthly_task and not _monthly_task.done():
-        _monthly_task.cancel()
-
-
 # =================== PINNED OVERVIEW (лог-канал) ===================
 # Вместо ежедневной сводки в 23:55 — одно закреплённое сообщение с общей
 # статистикой за всё время, которое периодически обновляется (редактируется),
@@ -261,9 +252,3 @@ def start_pinned_overview(bot: Bot) -> asyncio.Task:
     global _pinned_stats_task
     _pinned_stats_task = asyncio.create_task(pinned_overview_loop(bot))
     return _pinned_stats_task
-
-
-def stop_pinned_overview() -> None:
-    global _pinned_stats_task
-    if _pinned_stats_task and not _pinned_stats_task.done():
-        _pinned_stats_task.cancel()

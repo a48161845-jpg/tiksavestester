@@ -51,6 +51,7 @@ async def send_external_video(
     info: Dict[str, Any],
     dl_info: Dict[str, Any],
     emoji: str,
+    source: str = "youtube",
 ) -> None:
     """Отправляет скачанное видео с кнопками Музыка/Описание/Донат и учитывает статистику/рефералку."""
     title = str(dl_info.get("title") or info.get("title") or "").strip()
@@ -84,5 +85,5 @@ async def send_external_video(
         # всё равно получил файл (кнопки при этом сохраняются).
         await message.answer_document(FSInputFile(tmp_path), caption=caption, parse_mode="HTML", reply_markup=kb)
 
-    store.inc_download(uid, "video", items=1)
+    store.inc_download(uid, "video", items=1, source=source)
     await reward_referral_if_first_download(message.bot, uid, label)

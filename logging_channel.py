@@ -6,7 +6,7 @@ import re
 import time
 import asyncio
 import contextlib
-from typing import Optional, Dict, Tuple, List
+from typing import Optional, Tuple, List
 
 from aiogram import Bot
 from aiogram.types import LinkPreviewOptions
