@@ -7,7 +7,6 @@
 поэтому YouTube-ссылки перехватываются здесь и не долетают до TikTok-хендлера.
 """
 import contextlib
-import time
 from pathlib import Path
 from typing import Optional
 
@@ -123,7 +122,7 @@ async def youtube_handler(message: Message):
                 await status.edit_text("📤 Отправляю…")
 
             try:
-                await send_external_video(message, uid, label, tmp_path, info, dl_info, emoji="🎬")
+                await send_external_video(message, uid, label, tmp_path, info, dl_info, emoji="🎬", source="youtube")
             except Exception as e:
                 await _log_yt_err(message.bot, "send", uid, label, url, e)
                 with contextlib.suppress(Exception):

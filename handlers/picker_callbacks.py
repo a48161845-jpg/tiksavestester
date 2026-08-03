@@ -16,7 +16,7 @@ from aiogram.types import CallbackQuery
 
 from globals_state import dp
 import globals_state
-from config import PAGE_SIZE, MSG_DL, MSG_PHOTO, CAPTION_PHOTO, REF_POINTS_PER_REFERRAL
+from config import PAGE_SIZE, MSG_DL, MSG_PHOTO, CAPTION_PHOTO
 from helpers import code
 from storage import store
 from user_label import resolve_user_label
@@ -176,7 +176,7 @@ async def picker_cb(call: CallbackQuery):
 
         await call.answer("Отправляю всё…")
         cnt = await send_photos(call.message, photos_all, caption_html=CAPTION_PHOTO)
-        store.inc_download(uid, "photo", items=cnt)
+        store.inc_download(uid, "photo", items=cnt, source="tiktok")
 
         if want_music and globals_state.g_provider:
             await send_music_if_any(call.message, globals_state.g_provider, st.get("music"), uid=uid, label=label, src=src)
@@ -226,7 +226,7 @@ async def picker_cb(call: CallbackQuery):
         cnt = 0
         if chosen:
             cnt = await send_photos(call.message, chosen, caption_html=CAPTION_PHOTO)
-            store.inc_download(uid, "photo", items=cnt)
+            store.inc_download(uid, "photo", items=cnt, source="tiktok")
 
         if want_music and globals_state.g_provider:
             await send_music_if_any(call.message, globals_state.g_provider, st.get("music"), uid=uid, label=label, src=src)

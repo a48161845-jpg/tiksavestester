@@ -163,7 +163,7 @@ async def other_sources_handler(message: Message):
                 await status.edit_text("📤 Отправляю…")
 
             try:
-                await send_external_video(message, uid, label, tmp_path, info, dl_info, emoji=emoji)
+                await send_external_video(message, uid, label, tmp_path, info, dl_info, emoji=emoji, source=platform)
             except Exception as e:
                 await _log_err(message.bot, platform, "send", uid, label, url, e)
                 with contextlib.suppress(Exception):

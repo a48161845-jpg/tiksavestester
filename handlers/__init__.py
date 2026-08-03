@@ -9,6 +9,7 @@
 """
 from . import commands
 from . import admin_commands
+from . import strikes_commands
 from . import admin_callbacks
 from . import donate_callbacks
 from . import help_callbacks

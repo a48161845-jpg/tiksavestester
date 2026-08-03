@@ -22,7 +22,7 @@ from config import (
     MSG_DL,
     CAPTION_VIDEO,
     PHOTO_WARNING_TEXT,
-    REF_POINTS_PER_REFERRAL,
+    MAX_VIDEO_MB,
 )
 from helpers import (
     html_escape,
@@ -151,7 +151,7 @@ async def main_handler(message: Message, client: TikWMClient, switcher: Provider
                 status_msg=status,
                 reply_markup=under_video_kb(has_music=bool(music), has_description=bool(description), req_id=req_id),
             )
-            store.inc_download(uid, "video", items=1)
+            store.inc_download(uid, "video", items=1, source="tiktok")
             await reward_referral_if_first_download(message.bot, uid, label)
             with contextlib.suppress(Exception):
                 await status.delete()
@@ -191,7 +191,7 @@ async def main_handler(message: Message, client: TikWMClient, switcher: Provider
         # Видео слишком большое — тихая ошибка, не логируем в канал
         if "file too large" in low:
             with contextlib.suppress(Exception):
-                await status.edit_text("❌ Видео слишком большое для отправки через Telegram (лимит 60 МБ).")
+                await status.edit_text(f"❌ Файл больше лимита ({MAX_VIDEO_MB} МБ). Telegram не даёт боту отправлять файлы тяжелее.")
             return
 
         store.inc_error("handler", e)

@@ -85,7 +85,7 @@ async def video_choice_cb(call: CallbackQuery):
                 CAPTION_VIDEO,
                 reply_markup=under_video_kb(has_music=has_music, req_id=req_id),
             )
-            store.inc_download(uid, "video", items=1)
+            store.inc_download(uid, "video", items=1, source="tiktok")
             await log_event(
                 call.bot,
                 "videodl",
