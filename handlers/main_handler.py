@@ -43,7 +43,7 @@ from send_helpers import send_video_smart
 from picker_state import pending, cleanup_pending, video_extras, new_req_id, cleanup_video_extras, picker_kb
 from keyboards import under_video_kb
 from donate import waiting_stars_amount, send_stars_invoice
-from referral import reward_referral_if_first_download
+from referral import after_download_hooks
 
 
 @dp.message(F.text)
@@ -130,6 +130,7 @@ async def main_handler(message: Message, client: TikWMClient, switcher: Provider
                     "description": description,
                     "want_music": False,
                     "want_description": False,
+                    "want_as_video": False,
                     "selected": set(),
                     "page": 0,
                     "ts": time.time(),
@@ -152,7 +153,7 @@ async def main_handler(message: Message, client: TikWMClient, switcher: Provider
                 reply_markup=under_video_kb(has_music=bool(music), has_description=bool(description), req_id=req_id),
             )
             store.inc_download(uid, "video", items=1, source="tiktok")
-            await reward_referral_if_first_download(message.bot, uid, label)
+            await after_download_hooks(message.bot, uid, label)
             with contextlib.suppress(Exception):
                 await status.delete()
             await log_event(

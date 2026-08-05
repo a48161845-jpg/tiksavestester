@@ -18,7 +18,7 @@ from storage import store
 from user_label import resolve_user_label
 from gates import gate_callback, gate_message
 from logging_channel import log_event, format_user_for_log
-from send_helpers import send_music_if_any, send_description_if_any
+from send_helpers import send_music_if_any, send_external_audio, send_description_if_any
 from picker_state import video_extras
 from keyboards import (
     DONATE_TEXT,
@@ -52,7 +52,10 @@ async def dl_cb(call: CallbackQuery):
             return
         extra["music"] = None
         await call.answer("Отправляю звук…")
-        await send_music_if_any(call.message, globals_state.g_provider, url, uid=uid, label=label, src=extra.get("src"))
+        if extra.get("music_mode") == "ytdlp_external":
+            await send_external_audio(call.message, url, uid=uid, label=label)
+        else:
+            await send_music_if_any(call.message, globals_state.g_provider, url, uid=uid, label=label, src=extra.get("src"))
         with contextlib.suppress(Exception):
             if call.message:
                 await call.message.edit_reply_markup(

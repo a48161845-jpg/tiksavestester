@@ -26,7 +26,8 @@ from stats import (
 )
 from broadcast import (
     REMINDER_MSG,
-    ADVERTISEMENT_MSG,
+    DONATE_REMINDER_MSG,
+    REFERRAL_REMINDER_MSG,
     do_broadcast,
     pending_admin_broadcast,
     pending_admin_broadcast_text,
@@ -87,9 +88,13 @@ async def admin_cb(call: CallbackQuery):
             pending_admin_broadcast_text.pop(uid, None)
             await do_broadcast(call.message, uid, label, REMINDER_MSG)
             return
-        if kind == "advert":
+        if kind == "donate":
             pending_admin_broadcast_text.pop(uid, None)
-            await do_broadcast(call.message, uid, label, ADVERTISEMENT_MSG)
+            await do_broadcast(call.message, uid, label, DONATE_REMINDER_MSG)
+            return
+        if kind == "refreminder":
+            pending_admin_broadcast_text.pop(uid, None)
+            await do_broadcast(call.message, uid, label, REFERRAL_REMINDER_MSG)
             return
         if kind == "custom":
             raw = pending_admin_broadcast_text.get(uid, "")
@@ -167,8 +172,8 @@ async def admin_cb(call: CallbackQuery):
         await call.answer()
         return
 
-    if cmd == "advert":
-        pending_admin_broadcast[uid] = "advert"
+    if cmd == "donate":
+        pending_admin_broadcast[uid] = "donate"
         pending_admin_broadcast_text.pop(uid, None)
         pending_admin_broadcast_source[uid] = "panel"
         users_cnt = store.get_users_count()
@@ -179,11 +184,32 @@ async def admin_cb(call: CallbackQuery):
             await call.message.delete()
         await call.message.answer(
             "📣 <b>Подтверждение рассылки</b>\n\n"
-            "Тип: <b>Реклама</b>\n"
+            "Тип: <b>Донат</b>\n"
             f"Получателей: <b>{users_cnt}</b>\n\n"
             "Отправить?",
             parse_mode="HTML",
-            reply_markup=admin_broadcast_confirm_kb("advert"),
+            reply_markup=admin_broadcast_confirm_kb("donate"),
+        )
+        await call.answer()
+        return
+
+    if cmd == "refreminder":
+        pending_admin_broadcast[uid] = "refreminder"
+        pending_admin_broadcast_text.pop(uid, None)
+        pending_admin_broadcast_source[uid] = "panel"
+        users_cnt = store.get_users_count()
+        if not call.message:
+            await call.answer("Ошибка: сообщение недоступно.", show_alert=True)
+            return
+        with contextlib.suppress(Exception):
+            await call.message.delete()
+        await call.message.answer(
+            "📣 <b>Подтверждение рассылки</b>\n\n"
+            "Тип: <b>Реферальная система</b>\n"
+            f"Получателей: <b>{users_cnt}</b>\n\n"
+            "Отправить?",
+            parse_mode="HTML",
+            reply_markup=admin_broadcast_confirm_kb("refreminder"),
         )
         await call.answer()
         return

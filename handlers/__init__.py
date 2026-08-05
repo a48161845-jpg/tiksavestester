@@ -9,7 +9,6 @@
 """
 from . import commands
 from . import admin_commands
-from . import strikes_commands
 from . import admin_callbacks
 from . import donate_callbacks
 from . import help_callbacks
@@ -20,4 +19,5 @@ from . import picker_callbacks
 from . import video_choice_callbacks
 from . import youtube_handler
 from . import other_sources_handler
+from . import inline_handler
 from . import main_handler  # noqa: F401  (catch-all — импортировать последним)
