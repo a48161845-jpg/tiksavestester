@@ -94,6 +94,12 @@ def picker_kb(req_id: str) -> InlineKeyboardMarkup:
     if row2:
         rows.append(row2)
 
+    if st.get("photos"):
+        checked = "✅ " if st.get("want_as_video") else ""
+        rows.append(
+            [InlineKeyboardButton(text=f"{checked}🎬 Собрать видео (со звуком)", callback_data=f"pk:togvideo:{req_id}")]
+        )
+
     rows.append([InlineKeyboardButton(text="🧹 Очистить", callback_data=f"pk:clr:{req_id}")])
 
     if pages > 1:

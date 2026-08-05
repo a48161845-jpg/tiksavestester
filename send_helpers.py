@@ -226,3 +226,61 @@ async def send_description_if_any(message: Message, description: Optional[str]) 
                     f"🧨 Причина: <b>{html_escape(clamp_reason(e))}</b>",
                 ],
             )
+
+
+async def send_external_audio(
+    message: Message,
+    src_url: Optional[str],
+    *,
+    uid: Optional[int] = None,
+    label: Optional[str] = None,
+) -> None:
+    """
+    Кнопка "🎵 Музыка" под видео из внешних источников (YouTube/Instagram/VK/
+    Pinterest) — качаем звук заново через yt-dlp по исходной ссылке на пост,
+    а не переиспользуем сырую CDN-ссылку (у многих площадок, особенно VK,
+    она требует спец-заголовков, без которых скачивание падает/приходит
+    битым файлом — yt-dlp сам знает, что нужно каждой площадке).
+    """
+    from youtube_provider import download_audio_only  # локальный импорт — не плодим циклы на уровне модулей
+
+    if not src_url:
+        return
+    user_id = uid if uid is not None else message.chat.id
+
+    tmp_path: Optional[Path] = None
+    try:
+        tmp_path = await download_audio_only(src_url, Path("."))
+        await message.answer_audio(FSInputFile(tmp_path), caption=CAPTION_AUDIO, parse_mode="HTML")
+        if uid is not None:
+            store.inc_audio(uid, 1)
+        if label is not None:
+            await log_event(
+                message.bot,
+                "audiodl",
+                [
+                    "🎵 Категория: <b>Скачивание музыки</b>",
+                    f"👤 User/id: <b>{format_user_for_log(label, user_id)}</b>",
+                    f"🔗 Ссылка: {code(src_url)}",
+                ],
+            )
+    except Exception as e:
+        with contextlib.suppress(Exception):
+            await message.answer("❌ Не получилось скачать звук с этого видео.")
+        if label is not None:
+            await log_event(
+                message.bot,
+                "dlerr",
+                [
+                    "❌ Категория: <b>Ошибка скачивания</b>",
+                    f"👤 User/id: <b>{format_user_for_log(label, user_id)}</b>",
+                    "🧩 Стадия: <b>audio_external</b>",
+                    f"🧬 Тип: <b>{html_escape(exc_type_name(e))}</b>",
+                    f"🔗 Ссылка: {code(src_url)}",
+                    f"🧨 Причина: <b>{html_escape(clamp_reason(e))}</b>",
+                ],
+            )
+    finally:
+        if tmp_path:
+            with contextlib.suppress(Exception):
+                tmp_path.unlink(missing_ok=True)

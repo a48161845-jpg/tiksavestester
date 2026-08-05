@@ -114,6 +114,60 @@ async def download_youtube(
     return path, info_holder
 
 
+def has_audio_track(info: Dict[str, Any]) -> bool:
+    """Есть ли у видео вообще звук — проверяем по данным пробы (без скачивания)."""
+    acodec = info.get("acodec")
+    if acodec and acodec != "none":
+        return True
+    for f in info.get("formats") or []:
+        if f.get("acodec") and f.get("acodec") != "none":
+            return True
+    return False
+
+
+async def download_audio_only(url: str, out_dir: Path) -> Path:
+    """
+    Качает только звук через yt-dlp (bestaudio) — так же, как видео, а не
+    попыткой переиспользовать сырую CDN-ссылку напрямую. У многих площадок
+    (особенно VK) прямые ссылки на медиа требуют специфичных заголовков
+    (Referer и т.п.), которых у нашего простого HTTP-скачивателя нет — из-за
+    этого звук иногда не скачивался/приходил битым. yt-dlp сам знает, что
+    нужно каждой площадке, поэтому эта дорожка надёжнее.
+    """
+    def _run() -> Path:
+        out_template = str(out_dir / "%(id)s.audio.%(ext)s")
+        opts = {
+            "format": "bestaudio/best",
+            "outtmpl": out_template,
+            "noplaylist": True,
+            "quiet": True,
+            "no_warnings": True,
+            "nocheckcertificate": True,
+            "socket_timeout": 20,
+            "retries": 3,
+        }
+        if _FFMPEG_PATH:
+            opts["ffmpeg_location"] = _FFMPEG_PATH
+            opts["postprocessors"] = [
+                {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}
+            ]
+
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info)
+            p = Path(filename)
+            # После FFmpegExtractAudio (если ffmpeg найден) расширение меняется на .mp3
+            for ext in (".mp3", ".m4a", ".webm", ".opus", ".ogg"):
+                candidate = p.with_suffix(ext)
+                if candidate.exists():
+                    return candidate
+            if p.exists():
+                return p
+            raise RuntimeError(f"yt-dlp: аудиофайл не найден ({filename})")
+
+    return await asyncio.to_thread(_run)
+
+
 # Эти функции на самом деле не привязаны к YouTube — просто вызывают
 # yt-dlp.extract_info(url), который сам определяет площадку. Алиасы с
 # нейтральными именами — для использования с Instagram/VK/Pinterest и т.п.

@@ -12,6 +12,7 @@ from typing import Dict, List, Optional
 from config import BOT_USERNAME, GIFTS, GIFTS_BY_KEY, REF_POINTS_PER_REFERRAL, REF_TOP_LIMIT
 from helpers import html_escape
 from storage import store
+from broadcast import maybe_send_random_reminder
 
 # uid -> gift_key: ждём подтверждения покупки этого подарка
 pending_gift_purchase: Dict[int, str] = {}
@@ -182,3 +183,36 @@ async def reward_referral_if_first_download(bot, uid: int, label: str) -> None:
             ),
             parse_mode="HTML",
         )
+
+
+REFERRAL_NUDGE_EVERY = 5
+
+REFERRAL_NUDGE_TEXT = (
+    "💡 <b>А ты знал?</b>\n\n"
+    "Приглашай друзей в TikSaves и получай баллы на подарки 🎁\n"
+    "Загляни в /ref — там твоя ссылка, магазин подарков и топ рефереров."
+)
+
+
+async def _maybe_suggest_referral(bot, uid: int) -> None:
+    """Раз в REFERRAL_NUDGE_EVERY любых скачиваний — ненавязчивое напоминание про /ref."""
+    total = store.bump_download_counter(uid)
+    if total % REFERRAL_NUDGE_EVERY != 0:
+        return
+    with contextlib.suppress(Exception):
+        await bot.send_message(uid, REFERRAL_NUDGE_TEXT, parse_mode="HTML")
+
+
+async def after_download_hooks(bot, uid: int, label: str) -> None:
+    """
+    Общие действия после ЛЮБОГО успешного скачивания (видео/фото, любой
+    источник): начисление баллов рефереру (если это первое скачивание
+    приглашённого) + периодическое персональное напоминание о рефералке +
+    редкая (примерно раз в 50 скачиваний по всему боту) случайная рассылка
+    всем пользователям одного из трёх напоминаний.
+    """
+    await reward_referral_if_first_download(bot, uid, label)
+    await _maybe_suggest_referral(bot, uid)
+
+    with contextlib.suppress(Exception):
+        await maybe_send_random_reminder(bot)

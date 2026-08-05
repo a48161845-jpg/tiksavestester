@@ -3,7 +3,7 @@
 Здесь нет бизнес-логики — только разметка интерфейса.
 """
 import urllib.parse
-from typing import List
+from typing import List, Optional
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -224,21 +224,17 @@ def post_download_kb() -> InlineKeyboardMarkup:
         ]
     )
 
-def under_video_kb(has_music: bool = False, has_description: bool = False, req_id: str = "") -> InlineKeyboardMarkup:
-    """Кнопки под скачанным видео: Музыка (если есть), Описание (если есть), Донат, Поделиться."""
-    top_row: List[InlineKeyboardButton] = []
+def under_video_kb(has_music: bool = False, has_description: bool = False, req_id: str = "") -> Optional[InlineKeyboardMarkup]:
+    """Кнопки под скачанным видео: Музыка (если есть), Описание (если есть). Без доната/поделиться."""
+    row: List[InlineKeyboardButton] = []
     if has_music:
-        top_row.append(InlineKeyboardButton(text="🎵 Музыка", callback_data=f"dl:audio:{req_id}"))
+        row.append(InlineKeyboardButton(text="🎵 Музыка", callback_data=f"dl:audio:{req_id}"))
     if has_description:
-        top_row.append(InlineKeyboardButton(text="📝 Описание", callback_data=f"dl:desc:{req_id}"))
+        row.append(InlineKeyboardButton(text="📝 Описание", callback_data=f"dl:desc:{req_id}"))
 
-    bottom_row: List[InlineKeyboardButton] = [
-        InlineKeyboardButton(text="💛 Донат", callback_data="donate:open"),
-        InlineKeyboardButton(text="🔗 Поделиться", url=_share_url()),
-    ]
-
-    rows = [top_row, bottom_row] if top_row else [bottom_row]
-    return InlineKeyboardMarkup(inline_keyboard=rows)
+    if not row:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=[row])
 
 def video_choice_kb() -> InlineKeyboardMarkup:
     """Только «Скачать видео» и «Отмена» — кнопка музыки перенесена под видео."""
@@ -263,7 +259,10 @@ def admin_menu_kb() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(text="📌 Напоминание", callback_data="ad:reminder"),
-                InlineKeyboardButton(text="📢 Реклама", callback_data="ad:advert"),
+                InlineKeyboardButton(text="💛 Донат", callback_data="ad:donate"),
+            ],
+            [
+                InlineKeyboardButton(text="🎁 Рефералка", callback_data="ad:refreminder"),
             ],
             [
                 InlineKeyboardButton(text="👑 Администраторы", callback_data="ad:adminlist"),
@@ -293,7 +292,7 @@ ADMIN_MENU_TEXT = (
     "🚫 <b>Бан-лист</b> — активные баны\n"
     "🗄 <b>Дамп БД</b> — скачать базу данных\n"
     "👑 <b>Администраторы</b> — список и управление\n"
-    "📌 <b>Напоминание</b> / 📢 <b>Реклама</b> — рассылки\n"
+    "📌 <b>Напоминание</b> / 💛 <b>Донат</b> / 🎁 <b>Рефералка</b> — рассылки вручную\n"
     "🧾 <b>Команды</b> — полный список\n"
 )
 

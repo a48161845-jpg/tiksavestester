@@ -1,16 +1,17 @@
 """
-Рассылки: ручная (через /broadcast или admin UI) и автоматическая по расписанию
-(напоминание/реклама каждые 4 дня), плюс готовые тексты-шаблоны.
+Рассылки: ручная (через /broadcast или admin UI) и автоматическая —
+случайно, примерно раз в 50 скачиваний (не по расписанию), выбирает одно
+из трёх готовых напоминаний и шлёт всем пользователям.
 """
 import asyncio
-from datetime import timedelta
+import random
 from typing import Dict
 
 from aiogram import Bot
 from aiogram.types import Message, LinkPreviewOptions
 
-from config import BROADCAST_MAX_USERS, BROADCAST_DELAY_SEC, log
-from helpers import html_escape, msk_now, to_html_simple
+from config import BROADCAST_MAX_USERS, BROADCAST_DELAY_SEC
+from helpers import html_escape, to_html_simple
 from storage import store
 from admin_log_file import log_admin
 from logging_channel import log_event, format_user_for_log
@@ -24,12 +25,15 @@ pending_admin_broadcast_cancel: Dict[int, bool] = {}
 
 # ================== PRESET TEXTS ==================
 REMINDER_MSG = (
-    "📌 **На всякий случай, напоминаем** \n\n"
-    "**🆘 Что-то не работает?**\n"
-    "Команда **/support** покажет, куда писать — или сразу пиши: **@tiksavesbotsupport**\n\n"
-    "**💛 Нравится бот?**\n"
-    "Команда **/donate** — если он помогает, поддержка через Stars ⭐️ или крипту 💲 реально важна для нас.\n\n"
-    "*Спасибо, что ты с нами 🙌*"
+    "📌 **Не забывай** \n\n"
+    "Если что-то не работает или есть вопрос — команда **/support** покажет, куда писать.\n\n"
+    "*Мы всегда на связи* 🙌"
+)
+
+DONATE_REMINDER_MSG = (
+    "💛 **Нравится бот?**\n\n"
+    "Если TikSaves помогает — поддержи проект через **/donate**: Telegram Stars ⭐️ или крипта 💲.\n\n"
+    "Любая помощь идёт на хостинг и развитие бота — спасибо! 🙏"
 )
 
 REFERRAL_REMINDER_MSG = (
@@ -43,12 +47,14 @@ REFERRAL_REMINDER_MSG = (
     "*Заходи в /ref прямо сейчас* 👀"
 )
 
-ADVERTISEMENT_MSG = (
-    "😄 **Привет, друзья!**\n\n"
-    "TikSaves скачивает видео, фото-слайдшоу и музыку из TikTok — без водяных знаков, подписок и лишних каналов. А ещё умеет YouTube 🎬\n\n"
-    "Если бот полезен — расскажи о нём друзьям, это реально помогает проекту расти 🚀\n\n"
-    "*Спасибо! Команда TikSaves* 💛"
-)
+# ~1 рассылка на каждые 50 скачиваний, но по-настоящему случайно (не жёсткий
+# счётчик "ровно на 50-м") — проверяется на каждом успешном скачивании.
+RANDOM_REMINDER_CHANCE = 1 / 50
+_RANDOM_PRESETS = [
+    ("reminder", REMINDER_MSG),
+    ("donate_reminder", DONATE_REMINDER_MSG),
+    ("ref_reminder", REFERRAL_REMINDER_MSG),
+]
 
 
 async def do_broadcast(message: Message, admin_id: int, admin_label: str, raw_text: str, *, already_html: bool = False) -> None:
@@ -178,51 +184,14 @@ async def do_broadcast_system(bot: Bot, kind: str, raw_text: str) -> None:
     )
 
 
-def _broadcast_state() -> Dict[str, str]:
-    store.data.setdefault("broadcast_state", {})
-    return store.data["broadcast_state"]
-
-
-async def broadcast_schedule_loop(bot: Bot) -> None:
-    # Напоминание — раз в неделю (в 15:00); напоминание про рефералку — раз в
-    # неделю, но в другой день и час (17:00, сдвиг на 3 дня от основного,
-    # чтобы не слать два сообщения в один день); реклама бота — раз в 4 дня (в 20:00)
-    while True:
-        try:
-            now = msk_now()
-            today_str = now.strftime("%Y-%m-%d")
-            week_mod = now.date().toordinal() % 7
-            ref_week_mod = (now.date().toordinal() - 3) % 7
-            day_mod = now.date().toordinal() % 4
-            state = _broadcast_state()
-
-            if now.hour == 15 and now.minute == 0 and week_mod == 0:
-                if state.get("last_reminder") != today_str:
-                    await do_broadcast_system(bot, "reminder", REMINDER_MSG)
-                    state["last_reminder"] = today_str
-                    store._mark_dirty()
-                    log.info("broadcast: reminder sent at 15:00 (weekly cycle)")
-
-            if now.hour == 17 and now.minute == 0 and ref_week_mod == 0:
-                if state.get("last_ref_reminder") != today_str:
-                    await do_broadcast_system(bot, "ref_reminder", REFERRAL_REMINDER_MSG)
-                    state["last_ref_reminder"] = today_str
-                    store._mark_dirty()
-                    log.info("broadcast: referral reminder sent at 17:00 (weekly cycle)")
-
-            if now.hour == 20 and now.minute == 0 and day_mod == 0:
-                if state.get("last_advert") != today_str:
-                    await do_broadcast_system(bot, "advert", ADVERTISEMENT_MSG)
-                    state["last_advert"] = today_str
-                    store._mark_dirty()
-                    log.info("broadcast: advert sent at 20:00 (4-day cycle)")
-
-            # Спим до следующей минуты, чтобы не пропустить 15:00 / 17:00 / 20:00
-            next_minute = now.replace(second=0, microsecond=0) + timedelta(minutes=1)
-            wait_sec = (next_minute - now).total_seconds()
-            await asyncio.sleep(max(1, min(60, wait_sec)))
-        except asyncio.CancelledError:
-            break
-        except Exception as e:
-            log.exception("broadcast_schedule_loop: %s", e)
-            await asyncio.sleep(60)
+async def maybe_send_random_reminder(bot: Bot) -> None:
+    """
+    Вызывается после КАЖДОГО успешного скачивания (любой пользователь, любой
+    источник). С шансом RANDOM_REMINDER_CHANCE (~1/50) выбирает случайно одно
+    из трёх напоминаний (обычное/донат/реферальное) и рассылает его всем —
+    вместо фиксированного расписания по времени.
+    """
+    if random.random() >= RANDOM_REMINDER_CHANCE:
+        return
+    kind, text = random.choice(_RANDOM_PRESETS)
+    await do_broadcast_system(bot, kind, text)

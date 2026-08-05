@@ -126,6 +126,8 @@ class Storage:
             # ---- магазин подарков ----
             "gift_requests": {},   # req_id_str -> {"user_id","gift_key","gift_name","gift_price","status","created_at","updated_at"}
             "gift_requests_seq": 0,
+            "download_counters": {},  # uid_str -> общее кол-во скачиваний (для напоминаний про /ref)
+            "inline_cache": {},  # url_hash -> {"file_id","kind","ts"} — кэш для inline-режима
         }
 
     # ---------- async load ----------
@@ -200,6 +202,29 @@ class Storage:
 
     async def save_unthrottled(self) -> None:
         await self._flush()
+
+    # ---------- inline mode cache ----------
+    def get_inline_cache(self, key: str) -> Optional[Dict[str, Any]]:
+        """Кэш file_id для inline-режима (по хэшу нормализованной ссылки) — чтобы не качать повторно."""
+        rec = self.data.get("inline_cache", {}).get(key)
+        return dict(rec) if rec else None
+
+    def set_inline_cache(self, key: str, file_id: str, kind: str = "video") -> None:
+        cache = self.data.setdefault("inline_cache", {})
+        cache[key] = {"file_id": file_id, "kind": kind, "ts": int(time.time())}
+        # Не даём кэшу расти бесконечно — грубое ограничение размера
+        if len(cache) > 5000:
+            oldest = sorted(cache.items(), key=lambda kv: kv[1].get("ts", 0))[:1000]
+            for k, _ in oldest:
+                cache.pop(k, None)
+        self._mark_dirty()
+
+    def bump_download_counter(self, uid: int) -> int:
+        """Общий счётчик скачиваний пользователя (любой тип/источник) — для периодических напоминаний."""
+        dc = self.data.setdefault("download_counters", {})
+        dc[str(uid)] = int(dc.get(str(uid), 0)) + 1
+        self._mark_dirty()
+        return dc[str(uid)]
 
     def get_users_count(self) -> int:
         """
