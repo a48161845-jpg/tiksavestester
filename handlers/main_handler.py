@@ -40,7 +40,7 @@ from logging_channel import log_event, format_user_for_log
 from strikes import add_download_strike
 from providers import TikWMClient, ProviderSwitcher
 from send_helpers import send_video_smart
-from picker_state import pending, cleanup_pending, video_extras, new_req_id, cleanup_video_extras, picker_kb
+from picker_state import pending, cleanup_pending, video_extras, new_req_id, cleanup_video_extras, photo_mode_choice_kb
 from keyboards import under_video_kb
 from donate import waiting_stars_amount, send_stars_invoice
 from referral import after_download_hooks
@@ -130,14 +130,17 @@ async def main_handler(message: Message, client: TikWMClient, switcher: Provider
                     "description": description,
                     "want_music": False,
                     "want_description": False,
-                    "want_as_video": False,
                     "selected": set(),
                     "page": 0,
                     "ts": time.time(),
                     "src": url or text,
                 }
                 with contextlib.suppress(Exception):
-                    await status.edit_text("🖼️ Выбери фото по номерам или выдели страницу 👇", reply_markup=picker_kb(req_id))
+                    await status.edit_text(
+                        "📎 <b>В посте несколько фото</b>\n\nКак скачать?",
+                        parse_mode="HTML",
+                        reply_markup=photo_mode_choice_kb(req_id),
+                    )
                 return
 
             if not video:

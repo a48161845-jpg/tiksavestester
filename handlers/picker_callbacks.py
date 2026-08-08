@@ -1,6 +1,7 @@
 """
-Callback-обработчик фото-пикера: пагинация, выбор отдельных фото,
-музыка/описание (галочки-переключатели), скачивание выбранного/всего.
+Callback-обработчик фото-пикера: сначала выбор режима (фото или видео),
+потом — для режима "фото" — пагинация/выбор отдельных фото, музыка/описание
+(галочки-переключатели), скачивание выбранного/всего.
 
 callback_data начинается на "pk:" и всегда содержит req_id — уникальный
 идентификатор конкретного сообщения-пикера (НЕ uid!). Это важно: если
@@ -27,18 +28,28 @@ from logging_channel import log_event, format_user_for_log
 from strikes import add_download_strike
 from send_helpers import send_photos, send_music_if_any, send_description_if_any
 from referral import after_download_hooks
-from picker_state import pending, cleanup_pending, picker_kb
-from keyboards import post_download_kb
+from picker_state import pending, cleanup_pending, picker_kb, video_extras, new_req_id, cleanup_video_extras
+from keyboards import post_download_kb, under_video_kb
 from photo_video import build_photo_slideshow_video, SlideshowBuildError
 
 
-async def _maybe_send_as_video(call: CallbackQuery, st: dict, photo_urls: list, uid: int, label: str) -> None:
-    """Если включена галочка "Собрать видео" — качает фото+музыку и склеивает в MP4 через ffmpeg."""
-    if not st.get("want_as_video") or not photo_urls:
-        return
+async def _send_photos_as_video(call: CallbackQuery, st: dict, uid: int, label: str) -> None:
+    """
+    Режим "🎬 Как видео": собирает все фото + музыку поста в одно MP4 через
+    ffmpeg и отправляет ЕГО ЖЕ, как обычное скачанное видео — с кнопками
+    Музыка/Описание (как у TikTok), а не как фото-альбом.
+    """
+    photo_urls = list(st.get("photos") or [])
     session = getattr(globals_state.g_provider, "session", None)
-    if not session:
+
+    if not photo_urls or not session:
+        with contextlib.suppress(Exception):
+            await call.message.answer("❌ Не получилось собрать видео — попробуй ещё раз.")
         return
+
+    status = None
+    with contextlib.suppress(Exception):
+        status = await call.message.answer("🎬 Собираю видео из фото, подожди немного…")
 
     name_prefix = f"slideshow_{uid}_{int(time.time())}"
     out_path: Path = None
@@ -46,11 +57,38 @@ async def _maybe_send_as_video(call: CallbackQuery, st: dict, photo_urls: list, 
         out_path = await build_photo_slideshow_video(
             session, photo_urls, st.get("music"), Path("."), name_prefix
         )
-        await call.message.answer_video(FSInputFile(out_path), caption=CAPTION_VIDEO, parse_mode="HTML")
+
+        description = st.get("description")
+        req_id = new_req_id()
+        cleanup_video_extras()
+        if st.get("music") or description:
+            video_extras[req_id] = {
+                "music": st.get("music"),
+                "description": description,
+                "src": st.get("src"),
+                "uid": uid,
+                "ts": time.time(),
+            }
+
+        with contextlib.suppress(Exception):
+            if status:
+                await status.delete()
+
+        await call.message.answer_video(
+            FSInputFile(out_path),
+            caption=CAPTION_VIDEO,
+            parse_mode="HTML",
+            reply_markup=under_video_kb(has_music=bool(st.get("music")), has_description=bool(description), req_id=req_id),
+        )
         store.inc_download(uid, "video", items=1, source="tiktok")
+        await after_download_hooks(call.bot, uid, label)
+
     except SlideshowBuildError as e:
         with contextlib.suppress(Exception):
-            await call.message.answer("❌ Не получилось собрать видео из фото. Попробуй ещё раз позже.")
+            if status:
+                await status.edit_text("❌ Не получилось собрать видео из фото. Попробуй ещё раз позже.")
+            else:
+                await call.message.answer("❌ Не получилось собрать видео из фото. Попробуй ещё раз позже.")
         with contextlib.suppress(Exception):
             await log_event(
                 call.bot,
@@ -83,6 +121,46 @@ async def picker_cb(call: CallbackQuery):
 
     parts = (call.data or "").split(":")
     act = parts[1] if len(parts) > 1 else ""
+
+    # У "mode" особая форма callback_data: pk:mode:{photo|video}:{req_id}
+    if act == "mode":
+        mode = parts[2] if len(parts) > 2 else ""
+        req_id = parts[3] if len(parts) > 3 else ""
+        st = pending.get(req_id)
+        if not st:
+            await call.answer("⏱️ Выбор устарел. Скинь ссылку ещё раз.", show_alert=True)
+            with contextlib.suppress(Exception):
+                if call.message:
+                    await call.message.delete()
+            return
+        if st.get("uid") != uid:
+            await call.answer("Это не твой выбор фото.", show_alert=True)
+            return
+
+        if mode == "photo":
+            await call.answer()
+            with contextlib.suppress(Exception):
+                await call.message.edit_text("🖼️ Выбери фото по номерам или выдели страницу 👇", reply_markup=picker_kb(req_id))
+            return
+
+        if mode == "video":
+            ok, wait = lim.dl_hit(uid)
+            if not ok:
+                await call.message.answer(MSG_DL.format(n=wait), parse_mode="HTML")
+                await add_download_strike(call.bot, uid, label, "Лимит скачиваний", src=st.get("src"))
+                await call.answer()
+                return
+
+            pending.pop(req_id, None)
+            with contextlib.suppress(Exception):
+                await call.message.delete()
+            await call.answer("Собираю видео…")
+            await _send_photos_as_video(call, st, uid, label)
+            return
+
+        await call.answer()
+        return
+
     req_id = parts[2] if len(parts) > 2 else ""
 
     st = pending.get(req_id)
@@ -166,7 +244,6 @@ async def picker_cb(call: CallbackQuery):
         st["selected"].clear()
         st["want_music"] = False
         st["want_description"] = False
-        st["want_as_video"] = False
         await call.answer("🧹 Очищено")
         await call.message.edit_reply_markup(reply_markup=picker_kb(req_id))
         return
@@ -197,13 +274,6 @@ async def picker_cb(call: CallbackQuery):
         await call.message.edit_reply_markup(reply_markup=picker_kb(req_id))
         return
 
-    if act == "togvideo":
-        if st.get("photos"):
-            st["want_as_video"] = not st.get("want_as_video", False)
-        await call.answer("🎬 Соберу видео со звуком" if st.get("want_as_video") else "🎬 Видео убрано")
-        await call.message.edit_reply_markup(reply_markup=picker_kb(req_id))
-        return
-
     if act == "sendall":
         src = str(st.get("src", ""))
         photos_all = list(st["photos"])
@@ -229,7 +299,6 @@ async def picker_cb(call: CallbackQuery):
             await send_music_if_any(call.message, globals_state.g_provider, st.get("music"), uid=uid, label=label, src=src)
         if want_desc:
             await send_description_if_any(call.message, st.get("description"))
-        await _maybe_send_as_video(call, st, photos_all, uid, label)
 
         if cnt:
             await after_download_hooks(call.bot, uid, label)
@@ -252,16 +321,12 @@ async def picker_cb(call: CallbackQuery):
         sel: set[int] = st["selected"]
         want_music = bool(st.get("want_music") and st.get("music"))
         want_desc = bool(st.get("want_description") and st.get("description"))
-        want_video = bool(st.get("want_as_video"))
-        if not sel and not want_music and not want_desc and not want_video:
-            await call.answer("Выбери хотя бы одно фото (или галочку музыки/описания/видео).", show_alert=True)
+        if not sel and not want_music and not want_desc:
+            await call.answer("Выбери хотя бы одно фото (или галочку музыки/описания).", show_alert=True)
             return
 
         src = str(st.get("src", ""))
         chosen = [st["photos"][i] for i in sorted(sel)]
-        # Если фото по номерам не выбирали, но включили "Собрать видео" —
-        # используем все фото слайдшоу для сборки видео.
-        video_source_photos = chosen if chosen else (list(st["photos"]) if want_video else [])
 
         if not await gate_download():
             await call.answer()
@@ -284,12 +349,9 @@ async def picker_cb(call: CallbackQuery):
             await send_music_if_any(call.message, globals_state.g_provider, st.get("music"), uid=uid, label=label, src=src)
         if want_desc:
             await send_description_if_any(call.message, st.get("description"))
-        if video_source_photos:
-            await _maybe_send_as_video(call, st, video_source_photos, uid, label)
 
-        if cnt or video_source_photos:
-            await after_download_hooks(call.bot, uid, label)
         if cnt:
+            await after_download_hooks(call.bot, uid, label)
             await log_event(
                 call.bot,
                 "photodl",
