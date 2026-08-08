@@ -4,7 +4,6 @@
 из трёх готовых напоминаний и шлёт всем пользователям.
 """
 import asyncio
-import random
 from typing import Dict
 
 from aiogram import Bot
@@ -49,12 +48,10 @@ REFERRAL_REMINDER_MSG = (
 
 # ~1 рассылка на каждые 50 скачиваний, но по-настоящему случайно (не жёсткий
 # счётчик "ровно на 50-м") — проверяется на каждом успешном скачивании.
+# ПРИМЕЧАНИЕ: фактическая отправка теперь идёт ТОЛЬКО тому, кто скачал
+# (см. referral.py:_maybe_send_random_personal_reminder), а не всем — эти
+# константы используются оттуда напрямую по импорту текстов.
 RANDOM_REMINDER_CHANCE = 1 / 50
-_RANDOM_PRESETS = [
-    ("reminder", REMINDER_MSG),
-    ("donate_reminder", DONATE_REMINDER_MSG),
-    ("ref_reminder", REFERRAL_REMINDER_MSG),
-]
 
 
 async def do_broadcast(message: Message, admin_id: int, admin_label: str, raw_text: str, *, already_html: bool = False) -> None:
@@ -184,14 +181,4 @@ async def do_broadcast_system(bot: Bot, kind: str, raw_text: str) -> None:
     )
 
 
-async def maybe_send_random_reminder(bot: Bot) -> None:
-    """
-    Вызывается после КАЖДОГО успешного скачивания (любой пользователь, любой
-    источник). С шансом RANDOM_REMINDER_CHANCE (~1/50) выбирает случайно одно
-    из трёх напоминаний (обычное/донат/реферальное) и рассылает его всем —
-    вместо фиксированного расписания по времени.
-    """
-    if random.random() >= RANDOM_REMINDER_CHANCE:
-        return
-    kind, text = random.choice(_RANDOM_PRESETS)
-    await do_broadcast_system(bot, kind, text)
+

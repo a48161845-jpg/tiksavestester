@@ -12,7 +12,6 @@ from typing import Dict, List, Optional
 from config import BOT_USERNAME, GIFTS, GIFTS_BY_KEY, REF_POINTS_PER_REFERRAL, REF_TOP_LIMIT
 from helpers import html_escape
 from storage import store
-from broadcast import maybe_send_random_reminder
 
 # uid -> gift_key: ждём подтверждения покупки этого подарка
 pending_gift_purchase: Dict[int, str] = {}
@@ -203,16 +202,31 @@ async def _maybe_suggest_referral(bot, uid: int) -> None:
         await bot.send_message(uid, REFERRAL_NUDGE_TEXT, parse_mode="HTML")
 
 
+async def _maybe_send_random_personal_reminder(bot, uid: int) -> None:
+    """
+    С шансом ~1/50 (по-настоящему случайно, не жёсткий счётчик) после
+    скачивания шлёт САМОМУ СКАЧАВШЕМУ (не рассылка всем!) одно из трёх
+    готовых напоминаний.
+    """
+    import random
+    from broadcast import REMINDER_MSG, DONATE_REMINDER_MSG, REFERRAL_REMINDER_MSG
+    from helpers import to_html_simple
+
+    if random.random() >= (1 / 50):
+        return
+    text = random.choice([REMINDER_MSG, DONATE_REMINDER_MSG, REFERRAL_REMINDER_MSG])
+    with contextlib.suppress(Exception):
+        await bot.send_message(uid, to_html_simple(text), parse_mode="HTML")
+
+
 async def after_download_hooks(bot, uid: int, label: str) -> None:
     """
     Общие действия после ЛЮБОГО успешного скачивания (видео/фото, любой
     источник): начисление баллов рефереру (если это первое скачивание
     приглашённого) + периодическое персональное напоминание о рефералке +
-    редкая (примерно раз в 50 скачиваний по всему боту) случайная рассылка
-    всем пользователям одного из трёх напоминаний.
+    редкое (примерно раз в 50 скачиваний) персональное напоминание (не
+    рассылка всем — только тому, кто только что скачал).
     """
     await reward_referral_if_first_download(bot, uid, label)
     await _maybe_suggest_referral(bot, uid)
-
-    with contextlib.suppress(Exception):
-        await maybe_send_random_reminder(bot)
+    await _maybe_send_random_personal_reminder(bot, uid)

@@ -115,10 +115,13 @@ async def download_youtube(
 
 
 def has_audio_track(info: Dict[str, Any]) -> bool:
-    """Есть ли у видео вообще звук — проверяем по данным пробы (без скачивания)."""
+    """Есть ли у видео вообще звук — проверяем по данным пробы/скачивания разными способами."""
     acodec = info.get("acodec")
     if acodec and acodec != "none":
         return True
+    for f in info.get("requested_formats") or []:
+        if f.get("acodec") and f.get("acodec") != "none":
+            return True
     for f in info.get("formats") or []:
         if f.get("acodec") and f.get("acodec") != "none":
             return True

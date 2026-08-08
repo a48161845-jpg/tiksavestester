@@ -31,6 +31,18 @@ def new_req_id() -> str:
     return uuid.uuid4().hex[:12]
 
 
+def photo_mode_choice_kb(req_id: str) -> InlineKeyboardMarkup:
+    """Меню перед пикером: скачать как отдельные фото или собрать всё в одно видео со звуком."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🖼️ Как фото", callback_data=f"pk:mode:photo:{req_id}"),
+                InlineKeyboardButton(text="🎬 Как видео", callback_data=f"pk:mode:video:{req_id}"),
+            ]
+        ]
+    )
+
+
 def cleanup_video_extras() -> None:
     now = time.time()
     dead = [k for k, v in video_extras.items() if now - float(v.get("ts", 0)) > VIDEO_EXTRAS_TTL_SEC]
@@ -93,12 +105,6 @@ def picker_kb(req_id: str) -> InlineKeyboardMarkup:
         row2.append(InlineKeyboardButton(text=f"{checked}📝 Описание", callback_data=f"pk:togdesc:{req_id}"))
     if row2:
         rows.append(row2)
-
-    if st.get("photos"):
-        checked = "✅ " if st.get("want_as_video") else ""
-        rows.append(
-            [InlineKeyboardButton(text=f"{checked}🎬 Собрать видео (со звуком)", callback_data=f"pk:togvideo:{req_id}")]
-        )
 
     rows.append([InlineKeyboardButton(text="🧹 Очистить", callback_data=f"pk:clr:{req_id}")])
 
